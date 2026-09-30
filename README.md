@@ -8,7 +8,7 @@ React + TypeScript movie discovery UI for an existing MFlix-style HTTP API. The 
 2. Copy `.env.example` to `.env.local` and set `VITE_API_BASE_URL` to your backend origin.
 3. Start the frontend with `npm run dev`.
 
-Without a reachable API, the app displays a small preview collection. Movie cards include search, genre filters, sorting, details, and a local-session watchlist. Comments load and post through the configured API.
+Without a reachable API, the app displays a small preview collection. Movie cards include search, genre filters, sorting, details, and a watchlist persisted in this browser's local storage. The watchlist does not sync across browsers or devices. Comments load and post through the configured API.
 
 ## API contract
 

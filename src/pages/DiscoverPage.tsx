@@ -12,6 +12,18 @@ const demoMovies: Movie[] = [
   { id: 'demo-6', title: 'Soft Focus', year: 2022, genres: ['Romance', 'Music'], rating: 7.8, runtime: 96, plot: 'A wedding photographer starts seeing the city differently through a borrowed camera.', director: 'Robin Wells', cast: ['Kit Avery', 'Luca James'], posterUrl: 'https://images.unsplash.com/photo-1519608487953-e999c86e7455?auto=format&fit=crop&w=900&q=85' },
 ]
 const genres = ['All films', 'Drama', 'Mystery', 'Comedy', 'Adventure', 'Thriller', 'Romance']
+const watchlistStorageKey = 'mosaic.watchlist.v1'
+
+function getSavedMovieIds(): string[] {
+  try {
+    const stored = window.localStorage.getItem(watchlistStorageKey)
+    if (!stored) return []
+    const savedMovieIds: unknown = JSON.parse(stored)
+    return Array.isArray(savedMovieIds) ? savedMovieIds.filter((id): id is string => typeof id === 'string') : []
+  } catch {
+    return []
+  }
+}
 
 function DiscoverPage() {
   const [movies, setMovies] = useState(demoMovies)
@@ -21,7 +33,7 @@ function DiscoverPage() {
   const [sortByRating, setSortByRating] = useState(false)
   const [showWatchlist, setShowWatchlist] = useState(false)
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null)
-  const [savedMovies, setSavedMovies] = useState<string[]>([])
+  const [savedMovies, setSavedMovies] = useState<string[]>(getSavedMovieIds)
   const [comments, setComments] = useState<MovieComment[]>([])
   const [commentName, setCommentName] = useState('')
   const [commentText, setCommentText] = useState('')
@@ -38,6 +50,14 @@ function DiscoverPage() {
     }).catch(() => { if (active) setUsingDemo(true) })
     return () => { active = false }
   }, [])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(watchlistStorageKey, JSON.stringify(savedMovies))
+    } catch {
+      return
+    }
+  }, [savedMovies])
 
   useEffect(() => {
     if (!selectedMovie) return
