@@ -22,6 +22,13 @@ The backend must enable CORS for the frontend origin when the two run on differe
 
 - `npm run build`
 - `npm run lint`
+- `npm test`
+
+Run unit tests in watch mode with `npm run test:watch`. Component tests use Vitest and React Testing Library; test files live beside their source modules.
+
+## Browser tests
+
+Start the Vite server with `npm run dev`, then launch Cypress in another terminal with `npm run cypress:open`. To run the Gherkin scenarios headlessly, use `npm run cypress:run` while the Vite server is running. Feature files live in `cypress/e2e`, with their step definitions alongside them.
 
 Currently, two official plugins are available:
 
