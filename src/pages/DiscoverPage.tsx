@@ -3,14 +3,6 @@ import { Bookmark, Check, Clapperboard, Film, Heart, MessageCircle, Play, Search
 import { createComment, getComments, getMovies, type Movie, type MovieComment } from '../api'
 import '../App.css'
 
-const demoMovies: Movie[] = [
-  { id: 'demo-1', title: 'The Quiet Between', year: 2025, genres: ['Drama', 'Mystery'], rating: 8.7, runtime: 114, plot: 'A sound archivist returns to her island home and finds a voice hidden in a recording made decades ago.', director: 'Mara Ellison', cast: ['Nina Park', 'Elias Reed', 'June Okafor'], posterUrl: 'https://images.unsplash.com/photo-1478720568477-152d9b164e26?auto=format&fit=crop&w=900&q=85' },
-  { id: 'demo-2', title: 'After the Orchard', year: 2024, genres: ['Drama', 'Romance'], rating: 8.2, runtime: 103, plot: 'Two estranged siblings spend one last summer caring for the place they grew up.', director: 'Theo Mercer', cast: ['Rae Lin', 'Samir Patel'], posterUrl: 'https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=900&q=85' },
-  { id: 'demo-3', title: 'A Map of Small Things', year: 2025, genres: ['Adventure', 'Comedy'], rating: 7.9, runtime: 98, plot: 'A meticulous cartographer and a chaotic street musician take the long way across the city.', director: 'Inez Flores', cast: ['Milo Hart', 'Asha Bell'], posterUrl: 'https://images.unsplash.com/photo-1519608487953-e999c86e7455?auto=format&fit=crop&w=900&q=85' },
-  { id: 'demo-4', title: 'Night Shift at the End', year: 2023, genres: ['Thriller', 'Sci-Fi'], rating: 8.1, runtime: 121, plot: 'On the final overnight shift at a remote observatory, the stars begin to disappear.', director: 'Caleb North', cast: ['Tess Morgan', 'Andre Cole'], posterUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=900&q=85' },
-  { id: 'demo-5', title: 'The Shape of Sunday', year: 2024, genres: ['Comedy', 'Drama'], rating: 7.6, runtime: 107, plot: 'One neighborhood, three dinner parties, and a very misunderstood invitation.', director: 'Nico Alvarez', cast: ['Leah Brooks', 'Jon Bell'], posterUrl: 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&w=900&q=85' },
-  { id: 'demo-6', title: 'Soft Focus', year: 2022, genres: ['Romance', 'Music'], rating: 7.8, runtime: 96, plot: 'A wedding photographer starts seeing the city differently through a borrowed camera.', director: 'Robin Wells', cast: ['Kit Avery', 'Luca James'], posterUrl: 'https://images.unsplash.com/photo-1519608487953-e999c86e7455?auto=format&fit=crop&w=900&q=85' },
-]
 const genres = ['All films', 'Drama', 'Mystery', 'Comedy', 'Adventure', 'Thriller', 'Romance']
 const watchlistStorageKey = 'mosaic.watchlist.v1'
 
@@ -26,8 +18,10 @@ function getSavedMovieIds(): string[] {
 }
 
 function DiscoverPage() {
-  const [movies, setMovies] = useState(demoMovies)
-  const [usingDemo, setUsingDemo] = useState(true)
+  const [movies, setMovies] = useState<Movie[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
   const [search, setSearch] = useState('')
   const [activeGenre, setActiveGenre] = useState('All films')
   const [sortByRating, setSortByRating] = useState(false)
@@ -44,12 +38,16 @@ function DiscoverPage() {
     let active = true
     getMovies().then((results) => {
       if (active) {
-        setMovies(results.length ? results : demoMovies)
-        setUsingDemo(results.length === 0)
+        setMovies(results)
+        setLoadError('')
       }
-    }).catch(() => { if (active) setUsingDemo(true) })
+    }).catch((error: unknown) => {
+      if (active) setLoadError(error instanceof Error ? error.message : 'Could not load films.')
+    }).finally(() => {
+      if (active) setIsLoading(false)
+    })
     return () => { active = false }
-  }, [])
+  }, [reloadKey])
 
   useEffect(() => {
     try {
@@ -123,7 +121,7 @@ function DiscoverPage() {
     <main id="top" className="main-content">
       <header className="topbar"><div className="breadcrumb"><span>YOUR SPACE</span><b>/</b> Discover</div><label className="search-box"><Search size={17} /><input aria-label="Search movies" onChange={(event) => setSearch(event.target.value)} placeholder="Find a film, director..." type="search" value={search} /><kbd>/</kbd></label><button className="avatar-small" type="button" aria-label="Guest profile">M</button></header>
       <div className="content-wrap" id="discover">
-        <section className="intro-row"><div><div className="eyebrow"><span className="eyebrow-line" /> THE GOOD STUFF, RIGHT THIS WAY</div><h1>Find your <em>next</em><br />favorite film.</h1><p className="intro-copy">A little bit of everything, picked for your kind of night.</p></div><div className={`connection-status${usingDemo ? ' is-demo' : ''}`}><span className="status-dot" />{usingDemo ? 'Preview collection' : 'Connected to your collection'}</div></section>
+        <section className="intro-row"><div><div className="eyebrow"><span className="eyebrow-line" /> THE GOOD STUFF, RIGHT THIS WAY</div><h1>Find your <em>next</em><br />favorite film.</h1><p className="intro-copy">A little bit of everything, picked for your kind of night.</p></div><div className={`connection-status${loadError ? ' is-error' : ''}`}><span className="status-dot" />{isLoading ? 'Loading collection' : loadError ? 'Backend unavailable' : 'Connected to your collection'}</div></section>
         {featuredMovie && <section className="feature-banner" style={{ backgroundImage: `linear-gradient(90deg, rgba(18, 33, 29, .98) 0%, rgba(18, 33, 29, .88) 39%, rgba(18, 33, 29, .08) 100%), url("${featuredMovie.posterUrl || ''}")` }} aria-label="Featured film">
           <div className="feature-copy"><div className="feature-kicker"><span><Sparkles size={13} /></span> IN THE SPOTLIGHT <i /> FEATURED FILM</div><h2>{featuredMovie.title}</h2><div className="feature-meta"><span>{featuredMovie.year}</span><i /><span>{featuredMovie.genres.slice(0, 2).join(' / ') || 'FEATURED'}</span><i /><span className="feature-rating"><Star size={13} fill="currentColor" /> {featuredMovie.rating.toFixed(1)}</span></div><p>{featuredMovie.plot || 'A story worth staying in for.'}</p><button className="feature-button" onClick={() => openMovie(featuredMovie)} type="button"><Play size={15} fill="currentColor" /> Explore film</button></div><span className="feature-index">01 <i /> {String(movies.length).padStart(2, '0')}</span>
         </section>}
@@ -139,7 +137,7 @@ function DiscoverPage() {
               </button>
               <div className="movie-info"><div className="movie-title-row"><button className="movie-title" onClick={() => openMovie(movie)} type="button">{movie.title}</button><button aria-label={isSaved ? `Remove ${movie.title} from watchlist` : `Add ${movie.title} to watchlist`} aria-pressed={isSaved} className={`save-button${isSaved ? ' saved' : ''}`} onClick={() => toggleSaved(movie.id)} type="button">{isSaved ? <Check size={15} /> : <Bookmark size={15} />}</button></div><div className="movie-subline"><span>{movie.year || '—'}</span><i />{movie.genres.slice(0, 2).join(' · ')}</div></div>
             </article>
-          })}</div> : <div className="empty-state"><Search size={22} /><strong>No films found</strong><span>Try another title or clear the genre filter.</span></div>}
+          })}</div> : <div className="empty-state"><Search size={22} /><strong>{isLoading ? 'Loading films' : loadError ? 'Could not load films' : 'No films found'}</strong><span>{isLoading ? 'Connecting to your collection...' : loadError ? loadError : 'Try another title or clear the genre filter.'}</span>{loadError && <button className="sort-button" onClick={() => { setIsLoading(true); setReloadKey((key) => key + 1) }} type="button">Try again</button>}</div>}
         </section>
         <footer className="page-footer"><span>MOSAIC <i /> FILM, FOUND.</span><span>MADE FOR THE LOVE OF A GOOD STORY</span></footer>
       </div>

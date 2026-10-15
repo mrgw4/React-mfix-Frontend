@@ -535,7 +535,7 @@
   white-space: nowrap;
 }
 
-.connection-status.is-demo {
+.connection-status.is-error {
   color: #886c31;
   background: #f7f1de;
 }

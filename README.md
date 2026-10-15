@@ -1,22 +1,23 @@
 # Mosaic movie frontend
 
-React + TypeScript movie discovery UI for an existing MFlix-style HTTP API. The browser talks to the backend only; keep MongoDB credentials on the server.
+React + TypeScript movie discovery UI for the MFlix API in `Example-Blog-Backend-NodeJS-`. The app fetches its catalog from the backend; it does not use seeded frontend movies. Keep MongoDB credentials on the server.
 
 ## Run locally
 
-1. Install dependencies with `npm install`.
-2. Copy `.env.example` to `.env.local` and set `VITE_API_BASE_URL` to your backend origin.
-3. Start the frontend with `npm run dev`.
+1. Start the backend with `npm run dev` from its project directory. By default, it listens on port `5000`.
+2. Install frontend dependencies with `npm install`.
+3. Copy `.env.example` to `.env.local`; leave `VITE_API_BASE_URL` blank to use the Vite proxy, which forwards `/api` requests to `http://localhost:5000`.
+4. Start the frontend with `npm run dev`.
 
-Without a reachable API, the app displays a small preview collection. Movie cards include search, genre filters, sorting, details, and a watchlist persisted in this browser's local storage. The watchlist does not sync across browsers or devices. Comments load and post through the configured API.
+If the backend is unreachable, the page displays the connection error and a retry action instead of sample data. Movie cards include search, genre filters, sorting, details, and a watchlist persisted in this browser's local storage. The watchlist does not sync across browsers or devices.
 
 ## API contract
 
-By default the frontend calls `GET /api/movies?limit=30`, `GET /api/comments?movie_id=<id>`, and `POST /api/comments` with `{ "movie_id": "...", "name": "...", "text": "..." }`. Configure the route paths with `VITE_MOVIES_ENDPOINT` and `VITE_COMMENTS_ENDPOINT` if your backend differs.
+By default the frontend calls `GET /api/movies?limit=30` and `GET /api/comments?movieId=<id>`. Configure the route paths with `VITE_MOVIES_ENDPOINT` and `VITE_COMMENTS_ENDPOINT` if your backend differs. For a deployed frontend, set `VITE_API_BASE_URL` to the API origin and configure the backend to allow that origin; the Vite proxy is for local development only.
 
-Movie responses can be a JSON array or an object containing `movies`, `results`, or `data`. The adapter maps common MFlix fields such as `_id`, `imdb.rating`, `fullplot`, `genres`, `cast`, and `poster` to the UI model. Comment lists can be arrays or an object containing `comments`, `results`, or `data`.
+The backend returns paginated movies in `data`; the adapter maps MFlix fields such as `_id`, `imdb.rating`, `fullplot`, `genres`, `directors`, `cast`, and `poster` to the UI model. Comment lists are fetched using the backend's `movieId` query parameter. Posting comments requires an authenticated backend session, which is not currently managed by this frontend.
 
-The backend must enable CORS for the frontend origin when the two run on different ports. The API should validate and sanitize submitted comments.
+The backend's default port is `5000`. When using a direct API origin instead of the local Vite proxy, the backend must enable CORS for the frontend origin.
 
 ## Checks
 

@@ -7,7 +7,24 @@ import App from '../App'
 describe('movie watchlist', () => {
   beforeEach(() => {
     window.localStorage.clear()
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('API unavailable')))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [{
+          _id: 'movie-123',
+          title: 'The Quiet Between',
+          year: 2025,
+          genres: ['Drama', 'Mystery'],
+          imdb: { rating: 8.7 },
+          runtime: 114,
+          fullplot: 'A story from the backend.',
+          directors: ['Mara Ellison'],
+          cast: ['Nina Park'],
+          poster: '',
+        }],
+        pagination: { page: 1, limit: 30, total: 1, pages: 1 },
+      }),
+    }))
   })
 
   afterEach(() => {
@@ -20,9 +37,9 @@ describe('movie watchlist', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: 'Add The Quiet Between to watchlist' }))
+    await user.click(await screen.findByRole('button', { name: 'Add The Quiet Between to watchlist' }))
 
-    expect(screen.getByRole('button', { name: 'Remove The Quiet Between from watchlist' }))
+    expect(await screen.findByRole('button', { name: 'Remove The Quiet Between from watchlist' }))
       .toHaveAttribute('aria-pressed', 'true')
 
     await user.click(screen.getByRole('button', { name: /Watchlist/ }))
@@ -31,15 +48,32 @@ describe('movie watchlist', () => {
     expect(screen.getByRole('button', { name: 'The Quiet Between' })).toBeVisible()
   })
 
+  it('loads movies from the backend response', async () => {
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: 'The Quiet Between' })).toBeVisible()
+    expect(screen.getByText('Connected to your collection')).toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/movies?limit=30'), expect.objectContaining({}))
+  })
+
+  it('shows a backend error instead of falling back to preview movies', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('API unavailable')))
+    render(<App />)
+
+    expect(await screen.findByText('Could not load films')).toBeInTheDocument()
+    expect(screen.getByText('API unavailable')).toBeInTheDocument()
+    expect(screen.queryByText('The Quiet Between')).not.toBeInTheDocument()
+  })
+
   it('restores saved movies after the app is reopened', async () => {
     const user = userEvent.setup()
     const { unmount } = render(<App />)
 
-    await user.click(screen.getByRole('button', { name: 'Add The Quiet Between to watchlist' }))
+    await user.click(await screen.findByRole('button', { name: 'Add The Quiet Between to watchlist' }))
     unmount()
     render(<App />)
 
-    expect(screen.getByRole('button', { name: 'Remove The Quiet Between from watchlist' }))
+    expect(await screen.findByRole('button', { name: 'Remove The Quiet Between from watchlist' }))
       .toHaveAttribute('aria-pressed', 'true')
     await user.click(screen.getByRole('button', { name: /Watchlist/ }))
     expect(screen.getByRole('button', { name: 'The Quiet Between' })).toBeVisible()

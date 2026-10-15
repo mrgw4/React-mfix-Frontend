@@ -55,7 +55,7 @@ function normalizeMovie(value: unknown, index: number): Movie {
     rating: Number(imdb.rating ?? movie.rating ?? movie.vote_average) || 0,
     runtime: Number(movie.runtime) || 0,
     plot: asString(movie.fullplot ?? movie.plot ?? movie.overview),
-    director: asString(movie.director),
+    director: asString(movie.director ?? asStringArray(movie.directors)[0]),
     cast: asStringArray(movie.cast ?? movie.actors),
     posterUrl: asString(movie.posterUrl ?? movie.poster_url ?? movie.poster ?? movie.image),
   }
@@ -79,7 +79,7 @@ export async function getMovies(): Promise<Movie[]> {
 }
 
 export async function getComments(movieId: string): Promise<MovieComment[]> {
-  const payload = await request<unknown>(endpointUrl(commentsEndpoint, { movie_id: movieId }))
+  const payload = await request<unknown>(endpointUrl(commentsEndpoint, { movieId }))
   return unwrapList(payload).map(normalizeComment)
 }
 
