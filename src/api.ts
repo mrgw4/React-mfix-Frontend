@@ -13,10 +13,13 @@ export type Movie = {
 
 export type MovieComment = { id: string; name: string; text: string; date: string }
 type CommentInput = { movieId: string; name: string; text: string }
+export type AuthUser = { id: string; name: string; email: string }
+export type AuthSession = { token: string; user: AuthUser }
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 const moviesEndpoint = import.meta.env.VITE_MOVIES_ENDPOINT ?? '/api/movies'
 const commentsEndpoint = import.meta.env.VITE_COMMENTS_ENDPOINT ?? '/api/comments'
+const usersEndpoint = import.meta.env.VITE_USERS_ENDPOINT ?? '/api/users'
 
 function endpointUrl(endpoint: string, query?: Record<string, string>) {
   const url = new URL(`${baseUrl}${endpoint}`, window.location.origin)
@@ -29,6 +32,17 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers })
   if (!response.ok) throw new Error(`Request failed (${response.status}).`)
   return response.json() as Promise<T>
+}
+
+async function authRequest<T>(endpoint: string, init: RequestInit): Promise<T> {
+  const headers = init.body ? { 'Content-Type': 'application/json', ...init.headers } : init.headers
+  const response = await fetch(endpointUrl(endpoint), { ...init, headers })
+  const payload: unknown = await response.json()
+  if (!response.ok) {
+    const message = asRecord(payload).error
+    throw new Error(typeof message === 'string' ? message : `Request failed (${response.status}).`)
+  }
+  return payload as T
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -87,4 +101,30 @@ export async function createComment(input: CommentInput): Promise<MovieComment> 
   const payload = await request<unknown>(endpointUrl(commentsEndpoint), { method: 'POST', body: JSON.stringify({ movie_id: input.movieId, name: input.name, text: input.text }) })
   const record = asRecord(payload)
   return normalizeComment(record.comment ?? record, Date.now())
+}
+
+export async function login(email: string, password: string): Promise<AuthSession> {
+  const payload = await authRequest<unknown>(`${usersEndpoint.replace(/\/$/, '')}/login`, {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+  const record = asRecord(payload)
+  const user = asRecord(record.user)
+  if (
+    typeof record.token !== 'string'
+    || !record.token
+    || typeof user.id !== 'string'
+    || typeof user.name !== 'string'
+    || typeof user.email !== 'string'
+  ) {
+    throw new Error('The server returned an invalid login response.')
+  }
+  return { token: record.token, user: { id: user.id, name: user.name, email: user.email } }
+}
+
+export function logout(token: string): Promise<{ message: string }> {
+  return authRequest<{ message: string }>(`${usersEndpoint.replace(/\/$/, '')}/logout`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
 }
