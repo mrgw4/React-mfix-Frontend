@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Bookmark, Clapperboard, Film, Search, Sparkles, Star } from 'lucide-react'
-import { login, logout, type AuthSession } from '../api'
+import { Bookmark, Clapperboard, Film, LogIn, Search, Sparkles, Star } from 'lucide-react'
+import { login, logout, register, type AuthSession } from '../api'
 import { AppShellContext, genres, type AppShellContextValue } from './AppShellContext'
 import '../App.css'
 
@@ -71,9 +71,13 @@ function AppTopbar({ search, setSearch, authSession, setAuthSession }: {
 }) {
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [authView, setAuthView] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -98,10 +102,12 @@ function AppTopbar({ search, setSearch, authSession, setAuthSession }: {
     event.preventDefault()
     setLoading(true)
     setError('')
+    setSuccessMessage('')
     try {
       const session = await login(email.trim(), password)
       setAuthSession(session)
       setPassword('')
+      setConfirmPassword('')
       try {
         window.localStorage.setItem(authStorageKey, JSON.stringify(session))
       } catch {
@@ -109,6 +115,35 @@ function AppTopbar({ search, setSearch, authSession, setAuthSession }: {
       }
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : 'Could not sign in.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function submitRegistration(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError('')
+    setSuccessMessage('')
+    const trimmedUsername = username.trim()
+    if (trimmedUsername.length < 4 || trimmedUsername.length > 25) {
+      setError('Username must be between 4 and 25 characters.')
+      return
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await register(trimmedUsername, email.trim(), password)
+      setAuthView('login')
+      setUsername('')
+      setPassword('')
+      setConfirmPassword('')
+      setSuccessMessage('Account created successfully. Please log in.')
+    } catch (registrationError) {
+      setError(registrationError instanceof Error ? registrationError.message : 'Could not create your account.')
     } finally {
       setLoading(false)
     }
@@ -141,17 +176,28 @@ function AppTopbar({ search, setSearch, authSession, setAuthSession }: {
     <div className="breadcrumb"><span>YOUR SPACE</span><b>/</b> {pageName}</div>
     <label className="search-box"><Search size={17} /><input aria-label="Search movies" onChange={(event) => setSearch(event.target.value)} placeholder="Find a film, director..." type="search" value={search} /><kbd>/</kbd></label>
     <div className="account-menu" ref={menuRef}>
-      <button aria-controls="account-dropdown" aria-expanded={menuOpen} className="avatar-small" onClick={() => { setMenuOpen((open) => !open); setError('') }} type="button" aria-label={authSession ? `Account menu for ${authSession.user.name}` : 'Guest profile'}>{authSession?.user.name.charAt(0).toUpperCase() || 'M'}</button>
+      <button aria-controls="account-dropdown" aria-expanded={menuOpen} className="avatar-small" onClick={() => { setMenuOpen((open) => !open); setError('') }} type="button" aria-label={authSession ? `Account menu for ${authSession.user.name}` : 'Open login menu'}>{authSession ? authSession.user.name.charAt(0).toUpperCase() : <LogIn aria-hidden="true" size={17} />}</button>
       {menuOpen && <section className="account-dropdown" id="account-dropdown" aria-label="Account menu">{authSession ? <>
         <div className="account-heading"><strong>{authSession.user.name}</strong><span>{authSession.user.email}</span></div>
         {error && <p className="auth-error" role="alert">{error}</p>}
         <button className="account-action" disabled={loading} onClick={submitLogout} type="button">{loading ? 'Signing out…' : 'Log out'}</button>
-      </> : <form className="account-form" onSubmit={submitLogin}>
+      </> : authView === 'register' ? <form className="account-form" onSubmit={submitRegistration}>
+        <div className="account-heading"><strong>Create an account</strong><span>Join Mosaic to save your favorites</span></div>
+        <label>Username<input autoComplete="username" maxLength={25} minLength={4} onChange={(event) => setUsername(event.target.value)} required type="text" value={username} /></label>
+        <label>Email<input autoComplete="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
+        <label>Password<input autoComplete="new-password" maxLength={100} minLength={6} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
+        <label>Confirm password<input autoComplete="new-password" maxLength={100} minLength={6} onChange={(event) => setConfirmPassword(event.target.value)} required type="password" value={confirmPassword} /></label>
+        {error && <p className="auth-error" role="alert">{error}</p>}
+        <button className="account-action" disabled={loading} type="submit">{loading ? 'Creating account…' : 'Create account'}</button>
+        <button className="account-switch" onClick={() => { setAuthView('login'); setUsername(''); setPassword(''); setConfirmPassword(''); setError(''); setSuccessMessage('') }} type="button">Already have an account? Log in</button>
+      </form> : <form className="account-form" onSubmit={submitLogin}>
         <div className="account-heading"><strong>Welcome back</strong><span>Sign in to your account</span></div>
         <label>Email<input autoComplete="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
-        <label>Password<input autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
+        <label>Password<input autoComplete="current-password" minLength={6} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
         {error && <p className="auth-error" role="alert">{error}</p>}
+        {successMessage && <p className="auth-success" role="status">{successMessage}</p>}
         <button className="account-action" disabled={loading} type="submit">{loading ? 'Signing in…' : 'Log in'}</button>
+        <button className="account-switch" onClick={() => { setAuthView('register'); setPassword(''); setError(''); setSuccessMessage('') }} type="button">Don’t have an account? Create one</button>
       </form>}</section>}
     </div>
   </header>

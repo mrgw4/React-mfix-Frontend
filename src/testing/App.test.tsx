@@ -86,7 +86,7 @@ describe('movie watchlist', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: 'Guest profile' }))
+    await user.click(screen.getByRole('button', { name: 'Open login menu' }))
     await user.type(screen.getByLabelText('Email'), 'jane@example.com')
     await user.type(screen.getByLabelText('Password'), 'correct-password')
     await user.click(screen.getByRole('button', { name: 'Log in' }))
@@ -117,7 +117,7 @@ describe('movie watchlist', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: 'Guest profile' }))
+    await user.click(screen.getByRole('button', { name: 'Open login menu' }))
     await user.type(screen.getByLabelText('Email'), 'jane@example.com')
     await user.type(screen.getByLabelText('Password'), 'correct-password')
     await user.click(screen.getByRole('button', { name: 'Log in' }))
@@ -128,7 +128,7 @@ describe('movie watchlist', () => {
       headers: { Authorization: 'Bearer test-jwt' },
     }))
     expect(window.localStorage.getItem('mosaic.auth.v1')).toBeNull()
-    expect(await screen.findByRole('button', { name: 'Guest profile' })).toBeVisible()
+    expect(await screen.findByRole('button', { name: 'Open login menu' })).toBeVisible()
   })
 
   it('shows login errors returned by the backend', async () => {
@@ -145,12 +145,77 @@ describe('movie watchlist', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: 'Guest profile' }))
+    await user.click(screen.getByRole('button', { name: 'Open login menu' }))
     await user.type(screen.getByLabelText('Email'), 'jane@example.com')
     await user.type(screen.getByLabelText('Password'), 'wrong-password')
     await user.click(screen.getByRole('button', { name: 'Log in' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Invalid credentials')
+  })
+
+  it('creates an account and returns to login with a success message', async () => {
+    const session = {
+      token: 'test-jwt',
+      user: { id: 'user-1', name: 'Jane Doe', email: 'jane@example.com' },
+    }
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/api/users') && init?.method === 'POST') {
+        expect(init.body).toBe(JSON.stringify({
+          name: 'Jane Doe',
+          email: 'jane@example.com',
+          password: 'correct-password',
+        }))
+        return { ok: true, json: async () => ({ message: 'User created successfully' }) }
+      }
+      if (url.endsWith('/api/users/login')) {
+        expect(init?.body).toBe(JSON.stringify({ email: 'jane@example.com', password: 'correct-password' }))
+        return { ok: true, json: async () => session }
+      }
+      return {
+        ok: true,
+        json: async () => ({ data: [{ _id: 'movie-123', title: 'The Quiet Between' }] }),
+      }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Open login menu' }))
+    await user.click(screen.getByRole('button', { name: /Create one/ }))
+    await user.type(screen.getByLabelText('Username'), 'Jane Doe')
+    await user.type(screen.getByLabelText('Email'), 'jane@example.com')
+    await user.type(screen.getByLabelText('Password'), 'correct-password')
+    await user.type(screen.getByLabelText('Confirm password'), 'correct-password')
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Account created successfully. Please log in.')
+    expect(screen.getByLabelText('Email')).toHaveValue('jane@example.com')
+    expect(screen.queryByLabelText('Username')).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('Password'), 'correct-password')
+    await user.click(screen.getByRole('button', { name: 'Log in' }))
+    expect(await screen.findAllByText('jane@example.com')).toHaveLength(2)
+  })
+
+  it('does not create an account when the password confirmation differs', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ data: [] }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Open login menu' }))
+    await user.click(screen.getByRole('button', { name: /Create one/ }))
+    await user.type(screen.getByLabelText('Username'), 'Jane Doe')
+    await user.type(screen.getByLabelText('Email'), 'jane@example.com')
+    await user.type(screen.getByLabelText('Password'), 'correct-password')
+    await user.type(screen.getByLabelText('Confirm password'), 'different-password')
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Passwords do not match.')
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/api/users'), expect.objectContaining({ method: 'POST' }))
   })
 
   it('restores saved movies after the app is reopened', async () => {

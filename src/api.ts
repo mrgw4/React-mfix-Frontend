@@ -122,6 +122,13 @@ export async function login(email: string, password: string): Promise<AuthSessio
   return { token: record.token, user: { id: user.id, name: user.name, email: user.email } }
 }
 
+export async function register(name: string, email: string, password: string): Promise<void> {
+  await authRequest<unknown>(usersEndpoint.replace(/\/$/, ''), {
+    method: 'POST',
+    body: JSON.stringify({ name, email, password }),
+  })
+}
+
 export function logout(token: string): Promise<{ message: string }> {
   return authRequest<{ message: string }>(`${usersEndpoint.replace(/\/$/, '')}/logout`, {
     method: 'POST',

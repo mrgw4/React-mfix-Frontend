@@ -411,12 +411,16 @@
 }
 
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+
   height: 76px;
   display: flex;
   align-items: center;
   gap: 26px;
   padding: 0 5.2%;
-  background: rgba(255, 255, 255, .88);
+  background: #ffffff;
   border-bottom: 1px solid #e2e6e1;
 }
 
@@ -565,8 +569,29 @@
   opacity: .65;
 }
 
+.account-switch {
+  padding: 2px;
+  color: #31533e;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.account-switch:hover {
+  text-decoration: underline;
+}
+
 .auth-error {
   color: #a43d2a;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.auth-success {
+  color: #31533e;
   font-size: 11px;
   line-height: 1.45;
   overflow-wrap: anywhere;
