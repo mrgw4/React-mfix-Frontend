@@ -19,17 +19,19 @@ The backend returns paginated movies in `data`; the adapter maps MFlix fields su
 
 The backend's default port is `5000`. When using a direct API origin instead of the local Vite proxy, the backend must enable CORS for the frontend origin.
 
-## Checks
+## Validation
 
 - `npm run build`
 - `npm run lint`
 - `npm test`
 
-Run unit tests in watch mode with `npm run test:watch`. Component tests use Vitest and React Testing Library; test files live beside their source modules.
+Unit and integration tests use Vitest and React Testing Library. Run them in watch mode with `npm run test:watch`.
+
+Test suites are grouped by feature: `src/testing/api.test.ts` covers authentication API requests and responses, `src/testing/AuthMenu.integration.test.tsx` covers login and registration flows, and `src/testing/App.test.tsx` covers movie discovery and watchlist behavior.
 
 ## Browser tests
 
-Start the Vite server with `npm run dev`, then launch Cypress in another terminal with `npm run cypress:open`. To run the Gherkin scenarios headlessly, use `npm run cypress:run` while the Vite server is running. Feature files live in `cypress/e2e`, with their step definitions alongside them.
+Run `npm run cypress:run` with the Vite development server running. Use `npm run cypress:open` to launch the Cypress interface. Scenarios in `cypress/e2e` cover catalog search, registration, login, and password-confirmation validation; API responses are stubbed.
 
 Currently, two official plugins are available:
 

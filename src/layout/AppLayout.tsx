@@ -183,18 +183,18 @@ function AppTopbar({ search, setSearch, authSession, setAuthSession }: {
         <button className="account-action" disabled={loading} onClick={submitLogout} type="button">{loading ? 'Signing out…' : 'Log out'}</button>
       </> : authView === 'register' ? <form className="account-form" onSubmit={submitRegistration}>
         <div className="account-heading"><strong>Create an account</strong><span>Join Mosaic to save your favorites</span></div>
+        {error && <p className="auth-error" role="alert">{error}</p>}
         <label>Username<input autoComplete="username" maxLength={25} minLength={4} onChange={(event) => setUsername(event.target.value)} required type="text" value={username} /></label>
         <label>Email<input autoComplete="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
         <label>Password<input autoComplete="new-password" maxLength={100} minLength={6} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
         <label>Confirm password<input autoComplete="new-password" maxLength={100} minLength={6} onChange={(event) => setConfirmPassword(event.target.value)} required type="password" value={confirmPassword} /></label>
-        {error && <p className="auth-error" role="alert">{error}</p>}
         <button className="account-action" disabled={loading} type="submit">{loading ? 'Creating account…' : 'Create account'}</button>
         <button className="account-switch" onClick={() => { setAuthView('login'); setUsername(''); setPassword(''); setConfirmPassword(''); setError(''); setSuccessMessage('') }} type="button">Already have an account? Log in</button>
       </form> : <form className="account-form" onSubmit={submitLogin}>
         <div className="account-heading"><strong>Welcome back</strong><span>Sign in to your account</span></div>
+        {error && <p className="auth-error" role="alert">{error}</p>}
         <label>Email<input autoComplete="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
         <label>Password<input autoComplete="current-password" minLength={6} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>
-        {error && <p className="auth-error" role="alert">{error}</p>}
         {successMessage && <p className="auth-success" role="status">{successMessage}</p>}
         <button className="account-action" disabled={loading} type="submit">{loading ? 'Signing in…' : 'Log in'}</button>
         <button className="account-switch" onClick={() => { setAuthView('register'); setPassword(''); setError(''); setSuccessMessage('') }} type="button">Don’t have an account? Create one</button>

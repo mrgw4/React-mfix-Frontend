@@ -34,11 +34,17 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
-async function authRequest<T>(endpoint: string, init: RequestInit): Promise<T> {
+async function authRequest<T>(endpoint: string, init: RequestInit, unauthorizedMessage?: string): Promise<T> {
   const headers = init.body ? { 'Content-Type': 'application/json', ...init.headers } : init.headers
   const response = await fetch(endpointUrl(endpoint), { ...init, headers })
-  const payload: unknown = await response.json()
+  let payload: unknown
+  try {
+    payload = await response.json()
+  } catch {
+    if (response.ok) throw new Error('The server returned an invalid response.')
+  }
   if (!response.ok) {
+    if (response.status === 401 && unauthorizedMessage) throw new Error(unauthorizedMessage)
     const message = asRecord(payload).error
     throw new Error(typeof message === 'string' ? message : `Request failed (${response.status}).`)
   }
@@ -107,7 +113,7 @@ export async function login(email: string, password: string): Promise<AuthSessio
   const payload = await authRequest<unknown>(`${usersEndpoint.replace(/\/$/, '')}/login`, {
     method: 'POST',
     body: JSON.stringify({ email, password }),
-  })
+  }, 'Invalid username or password.')
   const record = asRecord(payload)
   const user = asRecord(record.user)
   if (
