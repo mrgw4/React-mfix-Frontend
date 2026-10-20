@@ -13,23 +13,25 @@ If the backend is unreachable, the page displays the connection error and a retr
 
 ## API contract
 
-By default the frontend calls `GET /api/movies?limit=30` and `GET /api/comments?movieId=<id>`. Configure the route paths with `VITE_MOVIES_ENDPOINT` and `VITE_COMMENTS_ENDPOINT` if your backend differs. For a deployed frontend, set `VITE_API_BASE_URL` to the API origin and configure the backend to allow that origin; the Vite proxy is for local development only.
+By default the frontend calls `GET /api/movies?limit=30` and `GET /api/comments?movieId=<id>`. Configure the route paths with `VITE_MOVIES_ENDPOINT` and `VITE_COMMENTS_ENDPOINT` if your backend differs. Account registration and login use `POST /api/users` and `POST /api/users/login`; configure `VITE_USERS_ENDPOINT` if the users route differs. Registration sends the username as the backend's `name` field and requires an email and matching password entries. For a deployed frontend, set `VITE_API_BASE_URL` to the API origin and configure the backend to allow that origin; the Vite proxy is for local development only.
 
 The backend returns paginated movies in `data`; the adapter maps MFlix fields such as `_id`, `imdb.rating`, `fullplot`, `genres`, `directors`, `cast`, and `poster` to the UI model. Comment lists are fetched using the backend's `movieId` query parameter. Posting comments requires an authenticated backend session, which is not currently managed by this frontend.
 
 The backend's default port is `5000`. When using a direct API origin instead of the local Vite proxy, the backend must enable CORS for the frontend origin.
 
-## Checks
+## Validation
 
 - `npm run build`
 - `npm run lint`
 - `npm test`
 
-Run unit tests in watch mode with `npm run test:watch`. Component tests use Vitest and React Testing Library; test files live beside their source modules.
+Unit and integration tests use Vitest and React Testing Library. Run them in watch mode with `npm run test:watch`.
+
+Test suites are grouped by feature: `src/testing/api.test.ts` covers authentication API requests and responses, `src/testing/AuthMenu.integration.test.tsx` covers login and registration flows, and `src/testing/App.test.tsx` covers movie discovery and watchlist behavior.
 
 ## Browser tests
 
-Start the Vite server with `npm run dev`, then launch Cypress in another terminal with `npm run cypress:open`. To run the Gherkin scenarios headlessly, use `npm run cypress:run` while the Vite server is running. Feature files live in `cypress/e2e`, with their step definitions alongside them.
+Run `npm run cypress:run` with the Vite development server running. Use `npm run cypress:open` to launch the Cypress interface. Scenarios in `cypress/e2e` cover catalog search, registration, login, and password-confirmation validation; API responses are stubbed.
 
 Currently, two official plugins are available:
 

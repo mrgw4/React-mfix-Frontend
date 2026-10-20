@@ -4,26 +4,28 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 
-describe('movie watchlist', () => {
+const movieResponse = {
+  data: [{
+    _id: 'movie-123',
+    title: 'The Quiet Between',
+    year: 2025,
+    genres: ['Drama', 'Mystery'],
+    imdb: { rating: 8.7 },
+    runtime: 114,
+    fullplot: 'A story from the backend.',
+    directors: ['Mara Ellison'],
+    cast: ['Nina Park'],
+    poster: '',
+  }],
+  pagination: { page: 1, limit: 30, total: 1, pages: 1 },
+}
+
+describe('movie discovery integration', () => {
   beforeEach(() => {
     window.localStorage.clear()
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({
-        data: [{
-          _id: 'movie-123',
-          title: 'The Quiet Between',
-          year: 2025,
-          genres: ['Drama', 'Mystery'],
-          imdb: { rating: 8.7 },
-          runtime: 114,
-          fullplot: 'A story from the backend.',
-          directors: ['Mara Ellison'],
-          cast: ['Nina Park'],
-          poster: '',
-        }],
-        pagination: { page: 1, limit: 30, total: 1, pages: 1 },
-      }),
+      json: async () => movieResponse,
     }))
   })
 
@@ -31,21 +33,6 @@ describe('movie watchlist', () => {
     cleanup()
     window.localStorage.clear()
     vi.unstubAllGlobals()
-  })
-
-  it('adds a movie to the watchlist and displays it', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-
-    await user.click(await screen.findByRole('button', { name: 'Add The Quiet Between to watchlist' }))
-
-    expect(await screen.findByRole('button', { name: 'Remove The Quiet Between from watchlist' }))
-      .toHaveAttribute('aria-pressed', 'true')
-
-    await user.click(screen.getByRole('button', { name: /Watchlist/ }))
-
-    expect(screen.getByRole('heading', { name: 'Your watchlist' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'The Quiet Between' })).toBeVisible()
   })
 
   it('loads movies from the backend response', async () => {
@@ -63,6 +50,21 @@ describe('movie watchlist', () => {
     expect(await screen.findByText('Could not load films')).toBeInTheDocument()
     expect(screen.getByText('API unavailable')).toBeInTheDocument()
     expect(screen.queryByText('The Quiet Between')).not.toBeInTheDocument()
+  })
+
+  it('adds a movie to the watchlist and displays it', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'Add The Quiet Between to watchlist' }))
+
+    expect(await screen.findByRole('button', { name: 'Remove The Quiet Between from watchlist' }))
+      .toHaveAttribute('aria-pressed', 'true')
+
+    await user.click(screen.getByRole('button', { name: /Watchlist/ }))
+
+    expect(screen.getByRole('heading', { name: 'Your watchlist' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'The Quiet Between' })).toBeVisible()
   })
 
   it('restores saved movies after the app is reopened', async () => {

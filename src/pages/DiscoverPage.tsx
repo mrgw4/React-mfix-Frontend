@@ -1,38 +1,20 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Bookmark, Check, Clapperboard, Film, Heart, MessageCircle, Play, Search, Send, SlidersHorizontal, Sparkles, Star, X } from 'lucide-react'
+import { Bookmark, Check, Film, Heart, MessageCircle, Play, Search, Send, SlidersHorizontal, Sparkles, Star, X } from 'lucide-react'
 import { createComment, getComments, getMovies, type Movie, type MovieComment } from '../api'
-import '../App.css'
-
-const genres = ['All films', 'Drama', 'Mystery', 'Comedy', 'Adventure', 'Thriller', 'Romance']
-const watchlistStorageKey = 'mosaic.watchlist.v1'
-
-function getSavedMovieIds(): string[] {
-  try {
-    const stored = window.localStorage.getItem(watchlistStorageKey)
-    if (!stored) return []
-    const savedMovieIds: unknown = JSON.parse(stored)
-    return Array.isArray(savedMovieIds) ? savedMovieIds.filter((id): id is string => typeof id === 'string') : []
-  } catch {
-    return []
-  }
-}
+import { genres, useAppShell } from '../layout/AppShellContext'
 
 function DiscoverPage() {
   const [movies, setMovies] = useState<Movie[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
-  const [search, setSearch] = useState('')
-  const [activeGenre, setActiveGenre] = useState('All films')
-  const [sortByRating, setSortByRating] = useState(false)
-  const [showWatchlist, setShowWatchlist] = useState(false)
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null)
-  const [savedMovies, setSavedMovies] = useState<string[]>(getSavedMovieIds)
   const [comments, setComments] = useState<MovieComment[]>([])
   const [commentName, setCommentName] = useState('')
   const [commentText, setCommentText] = useState('')
   const [commentError, setCommentError] = useState('')
   const [commentLoading, setCommentLoading] = useState(false)
+  const { search, activeGenre, setActiveGenre, sortByRating, setSortByRating, showWatchlist, setShowWatchlist, savedMovies, toggleSaved } = useAppShell()
 
   useEffect(() => {
     let active = true
@@ -48,14 +30,6 @@ function DiscoverPage() {
     })
     return () => { active = false }
   }, [reloadKey])
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(watchlistStorageKey, JSON.stringify(savedMovies))
-    } catch {
-      return
-    }
-  }, [savedMovies])
 
   useEffect(() => {
     if (!selectedMovie) return
@@ -74,10 +48,6 @@ function DiscoverPage() {
     return matchesSearch && matchesGenre && matchesWatchlist
   }).sort((first, second) => sortByRating ? second.rating - first.rating : second.year - first.year)
   const featuredMovie = movies[0]
-
-  function toggleSaved(movieId: string) {
-    setSavedMovies((current) => current.includes(movieId) ? current.filter((id) => id !== movieId) : [...current, movieId])
-  }
 
   function openMovie(movie: Movie) {
     setComments([])
@@ -101,26 +71,7 @@ function DiscoverPage() {
     }
   }
 
-  return <div className="app-shell">
-    <aside className="sidebar">
-      <a className="brand" href="#top" aria-label="Mosaic home"><span className="brand-mark"><Clapperboard size={20} /></span><span>mosaic<span className="brand-period">.</span></span></a>
-      <div className="side-label">YOUR SPACE</div>
-      <nav className="side-nav" aria-label="Main navigation">
-        <a className="nav-link active" href="#discover"><Sparkles size={17} /> Discover</a>
-        <button className="nav-link" onClick={() => { setSortByRating(true); setShowWatchlist(false) }} type="button"><Star size={17} /> Top rated</button>
-        <button className={`nav-link${showWatchlist ? ' active' : ''}`} onClick={() => setShowWatchlist((current) => !current)} type="button"><Bookmark size={17} /> Watchlist <span className="nav-count">{savedMovies.length}</span></button>
-      </nav>
-      <div className="side-label genre-label">BROWSE BY MOOD</div>
-      <nav className="genre-nav" aria-label="Browse by genre">
-        {genres.slice(1).map((genre) => <button className={`genre-link${activeGenre === genre ? ' selected' : ''}`} key={genre} onClick={() => { setActiveGenre(activeGenre === genre ? 'All films' : genre); setShowWatchlist(false) }} type="button"><span className={`genre-dot dot-${genre.toLowerCase()}`} />{genre}</button>)}
-      </nav>
-      <div className="sidebar-note"><span className="note-icon"><Film size={16} /></span><p>Your next favorite is out there.</p><span>Keep looking.</span></div>
-      <div className="profile-chip"><div className="profile-avatar">M</div><div><strong>Movie lover</strong><span>Guest profile</span></div><span className="profile-caret">⌄</span></div>
-    </aside>
-
-    <main id="top" className="main-content">
-      <header className="topbar"><div className="breadcrumb"><span>YOUR SPACE</span><b>/</b> Discover</div><label className="search-box"><Search size={17} /><input aria-label="Search movies" onChange={(event) => setSearch(event.target.value)} placeholder="Find a film, director..." type="search" value={search} /><kbd>/</kbd></label><button className="avatar-small" type="button" aria-label="Guest profile">M</button></header>
-      <div className="content-wrap" id="discover">
+  return <div className="content-wrap" id="discover">
         <section className="intro-row"><div><div className="eyebrow"><span className="eyebrow-line" /> THE GOOD STUFF, RIGHT THIS WAY</div><h1>Find your <em>next</em><br />favorite film.</h1><p className="intro-copy">A little bit of everything, picked for your kind of night.</p></div><div className={`connection-status${loadError ? ' is-error' : ''}`}><span className="status-dot" />{isLoading ? 'Loading collection' : loadError ? 'Backend unavailable' : 'Connected to your collection'}</div></section>
         {featuredMovie && <section className="feature-banner" style={{ backgroundImage: `linear-gradient(90deg, rgba(18, 33, 29, .98) 0%, rgba(18, 33, 29, .88) 39%, rgba(18, 33, 29, .08) 100%), url("${featuredMovie.posterUrl || ''}")` }} aria-label="Featured film">
           <div className="feature-copy"><div className="feature-kicker"><span><Sparkles size={13} /></span> IN THE SPOTLIGHT <i /> FEATURED FILM</div><h2>{featuredMovie.title}</h2><div className="feature-meta"><span>{featuredMovie.year}</span><i /><span>{featuredMovie.genres.slice(0, 2).join(' / ') || 'FEATURED'}</span><i /><span className="feature-rating"><Star size={13} fill="currentColor" /> {featuredMovie.rating.toFixed(1)}</span></div><p>{featuredMovie.plot || 'A story worth staying in for.'}</p><button className="feature-button" onClick={() => openMovie(featuredMovie)} type="button"><Play size={15} fill="currentColor" /> Explore film</button></div><span className="feature-index">01 <i /> {String(movies.length).padStart(2, '0')}</span>
@@ -140,9 +91,6 @@ function DiscoverPage() {
           })}</div> : <div className="empty-state"><Search size={22} /><strong>{isLoading ? 'Loading films' : loadError ? 'Could not load films' : 'No films found'}</strong><span>{isLoading ? 'Connecting to your collection...' : loadError ? loadError : 'Try another title or clear the genre filter.'}</span>{loadError && <button className="sort-button" onClick={() => { setIsLoading(true); setReloadKey((key) => key + 1) }} type="button">Try again</button>}</div>}
         </section>
         <footer className="page-footer"><span>MOSAIC <i /> FILM, FOUND.</span><span>MADE FOR THE LOVE OF A GOOD STORY</span></footer>
-      </div>
-    </main>
-
     {selectedMovie && <div className="dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setSelectedMovie(null)}>
       <section aria-labelledby="detail-title" aria-modal="true" className="detail-dialog" role="dialog">
         <button aria-label="Close film details" className="dialog-close" onClick={() => setSelectedMovie(null)} type="button"><X size={20} /></button>
