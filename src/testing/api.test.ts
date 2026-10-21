@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { login, logout, register, type AuthSession } from '../api'
+import { getGenres, getMovies, login, logout, register, type AuthSession } from '../api'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -17,6 +17,57 @@ function stubFetch(response: Response) {
 describe('auth API unit tests', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  describe('movie API unit tests', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it('maps movies from the paginated backend response', async () => {
+      const fetchMock = stubFetch(jsonResponse({
+        data: [{
+          _id: 'movie-1',
+          title: 'A Movie',
+          year: 2000,
+          genres: ['Drama'],
+          imdb: { rating: 7.5 },
+          runtime: 90,
+          plot: 'A story.',
+          directors: ['A Director'],
+          cast: ['An Actor'],
+          poster: 'poster.jpg',
+        }],
+        pagination: { page: 1, limit: 30, total: 1, pages: 1 },
+      }))
+
+      await expect(getMovies()).resolves.toEqual([{
+        id: 'movie-1',
+        title: 'A Movie',
+        year: 2000,
+        genres: ['Drama'],
+        rating: 7.5,
+        runtime: 90,
+        plot: 'A story.',
+        director: 'A Director',
+        cast: ['An Actor'],
+        posterUrl: 'poster.jpg',
+      }])
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/api/movies?limit=30'),
+        expect.objectContaining({}),
+      )
+    })
+
+    it('loads and normalizes genres from the backend genres endpoint', async () => {
+      const fetchMock = stubFetch(jsonResponse({ genres: ['Drama', 'Mystery', 'Drama', ' '] }))
+
+      await expect(getGenres()).resolves.toEqual(['Drama', 'Mystery'])
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/api/movies/genres'),
+        expect.objectContaining({}),
+      )
+    })
   })
 
   it('posts credentials and normalizes a valid login session', async () => {

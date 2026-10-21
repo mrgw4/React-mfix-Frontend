@@ -39,6 +39,7 @@ function stubBackend(authResponses: AuthResponses = {}) {
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     if (url.endsWith('/api/movies?limit=30')) return jsonResponse(movieResponse)
+    if (url.endsWith('/api/movies/genres')) return jsonResponse({ genres: ['Drama', 'Mystery'] })
 
     const route: AuthRoute | undefined = url.endsWith('/api/users') && init?.method === 'POST'
       ? 'register'

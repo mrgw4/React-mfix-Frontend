@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Bookmark, Clapperboard, Film, LogIn, Search, Sparkles, Star } from 'lucide-react'
-import { login, logout, register, type AuthSession } from '../api'
-import { AppShellContext, genres, type AppShellContextValue } from './AppShellContext'
+import { getGenres, login, logout, register, type AuthSession } from '../api'
+import { AppShellContext, type AppShellContextValue } from './AppShellContext'
 import '../App.css'
 
 const watchlistStorageKey = 'mosaic.watchlist.v1'
@@ -43,9 +43,9 @@ function getSavedAuthSession(): AuthSession | null {
   }
 }
 
-type AppSidebarProps = Pick<AppShellContextValue, 'savedMovies' | 'showWatchlist' | 'setShowWatchlist' | 'setSortByRating' | 'activeGenre' | 'setActiveGenre'> & { authSession: AuthSession | null }
+type AppSidebarProps = Pick<AppShellContextValue, 'genres' | 'savedMovies' | 'showWatchlist' | 'setShowWatchlist' | 'setSortByRating' | 'activeGenre' | 'setActiveGenre'> & { authSession: AuthSession | null }
 
-function AppSidebar({ savedMovies, showWatchlist, setShowWatchlist, setSortByRating, activeGenre, setActiveGenre, authSession }: AppSidebarProps) {
+function AppSidebar({ genres, savedMovies, showWatchlist, setShowWatchlist, setSortByRating, activeGenre, setActiveGenre, authSession }: AppSidebarProps) {
   return <aside className="sidebar">
     <NavLink className="brand" to="/" aria-label="Mosaic home"><span className="brand-mark"><Clapperboard size={20} /></span><span>mosaic<span className="brand-period">.</span></span></NavLink>
     <div className="side-label">YOUR SPACE</div>
@@ -56,7 +56,7 @@ function AppSidebar({ savedMovies, showWatchlist, setShowWatchlist, setSortByRat
     </nav>
     <div className="side-label genre-label">BROWSE BY MOOD</div>
     <nav className="genre-nav" aria-label="Browse by genre">
-      {genres.slice(1).map((genre) => <button className={`genre-link${activeGenre === genre ? ' selected' : ''}`} key={genre} onClick={() => { setActiveGenre(activeGenre === genre ? 'All films' : genre); setShowWatchlist(false) }} type="button"><span className={`genre-dot dot-${genre.toLowerCase()}`} />{genre}</button>)}
+      {genres.map((genre) => <button className={`genre-link${activeGenre === genre ? ' selected' : ''}`} key={genre} onClick={() => { setActiveGenre(activeGenre === genre ? 'All films' : genre); setShowWatchlist(false) }} type="button"><span className={`genre-dot dot-${genre.toLowerCase()}`} />{genre}</button>)}
     </nav>
     <div className="sidebar-note"><span className="note-icon"><Film size={16} /></span><p>Your next favorite is out there.</p><span>Keep looking.</span></div>
     <div className="profile-chip"><div className="profile-avatar">{authSession?.user.name.charAt(0).toUpperCase() || 'M'}</div><div><strong>{authSession?.user.name || 'Movie lover'}</strong><span>{authSession?.user.email || 'Guest profile'}</span></div><span className="profile-caret">⌄</span></div>
@@ -205,11 +205,28 @@ function AppTopbar({ search, setSearch, authSession, setAuthSession }: {
 
 export default function AppLayout() {
   const [search, setSearch] = useState('')
+  const [genres, setGenres] = useState<string[]>([])
+  const [genresError, setGenresError] = useState('')
   const [activeGenre, setActiveGenre] = useState('All films')
   const [sortByRating, setSortByRating] = useState(false)
   const [showWatchlist, setShowWatchlist] = useState(false)
   const [savedMovies, setSavedMovies] = useState<string[]>(getSavedMovieIds)
   const [authSession, setAuthSession] = useState<AuthSession | null>(getSavedAuthSession)
+
+  useEffect(() => {
+    let active = true
+    getGenres().then((results) => {
+      if (active) {
+        setGenres(results)
+        setGenresError('')
+      }
+    }).catch((error: unknown) => {
+      if (active) {
+        setGenresError(error instanceof Error ? `Could not load genres: ${error.message}` : 'Could not load genres.')
+      }
+    })
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     try {
@@ -226,6 +243,8 @@ export default function AppLayout() {
   const shellContext: AppShellContextValue = {
     search,
     setSearch,
+    genres,
+    genresError,
     activeGenre,
     setActiveGenre,
     sortByRating,
@@ -239,6 +258,7 @@ export default function AppLayout() {
   return <AppShellContext.Provider value={shellContext}>
     <div className="app-shell">
       <AppSidebar
+        genres={genres}
         savedMovies={savedMovies}
         showWatchlist={showWatchlist}
         setShowWatchlist={setShowWatchlist}

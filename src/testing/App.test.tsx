@@ -19,14 +19,15 @@ const movieResponse = {
   }],
   pagination: { page: 1, limit: 30, total: 1, pages: 1 },
 }
+const genresResponse = { genres: ['Drama', 'Mystery', 'Documentary'] }
 
 describe('movie discovery integration', () => {
   beforeEach(() => {
     window.localStorage.clear()
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: string | URL | Request) => ({
       ok: true,
-      json: async () => movieResponse,
-    }))
+      json: async () => String(input).includes('/genres') ? genresResponse : movieResponse,
+    })))
   })
 
   afterEach(() => {
@@ -39,8 +40,10 @@ describe('movie discovery integration', () => {
     render(<App />)
 
     expect(await screen.findByRole('button', { name: 'The Quiet Between' })).toBeVisible()
+    expect(screen.getAllByRole('button', { name: 'Documentary' }).length).toBeGreaterThan(0)
     expect(screen.getByText('Connected to your collection')).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/movies?limit=30'), expect.objectContaining({}))
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/movies/genres'), expect.objectContaining({}))
   })
 
   it('shows a backend error instead of falling back to preview movies', async () => {

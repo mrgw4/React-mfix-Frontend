@@ -98,6 +98,17 @@ export async function getMovies(): Promise<Movie[]> {
   return unwrapList(payload).map(normalizeMovie)
 }
 
+export async function getGenres(): Promise<string[]> {
+  const endpoint = `${moviesEndpoint.replace(/\/$/, '')}/genres`
+  const payload = await request<unknown>(endpointUrl(endpoint))
+  const genres = asRecord(payload).genres
+  if (!Array.isArray(genres) || genres.some((genre) => typeof genre !== 'string')) {
+    throw new Error('The server returned an invalid genres response.')
+  }
+  return [...new Set(genres.map((genre) => genre.trim()).filter(Boolean))]
+    .sort((first, second) => first.localeCompare(second))
+}
+
 export async function getComments(movieId: string): Promise<MovieComment[]> {
   const payload = await request<unknown>(endpointUrl(commentsEndpoint, { movieId }))
   return unwrapList(payload).map(normalizeComment)

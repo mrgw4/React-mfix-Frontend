@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Bookmark, Check, Film, Heart, MessageCircle, Play, Search, Send, SlidersHorizontal, Sparkles, Star, X } from 'lucide-react'
 import { createComment, getComments, getMovies, type Movie, type MovieComment } from '../api'
-import { genres, useAppShell } from '../layout/AppShellContext'
+import { useAppShell } from '../layout/AppShellContext'
 
 function DiscoverPage() {
   const [movies, setMovies] = useState<Movie[]>([])
@@ -14,7 +14,7 @@ function DiscoverPage() {
   const [commentText, setCommentText] = useState('')
   const [commentError, setCommentError] = useState('')
   const [commentLoading, setCommentLoading] = useState(false)
-  const { search, activeGenre, setActiveGenre, sortByRating, setSortByRating, showWatchlist, setShowWatchlist, savedMovies, toggleSaved } = useAppShell()
+  const { search, genres, genresError, activeGenre, setActiveGenre, sortByRating, setSortByRating, showWatchlist, setShowWatchlist, savedMovies, toggleSaved } = useAppShell()
 
   useEffect(() => {
     let active = true
@@ -78,7 +78,8 @@ function DiscoverPage() {
         </section>}
         <section className="catalog-section" aria-label="Movie catalog">
           <div className="catalog-heading"><div><div className="eyebrow small-eyebrow">A GOOD PLACE TO START</div><h2>{showWatchlist ? 'Your watchlist' : search ? 'Search results' : activeGenre === 'All films' ? 'A little of everything' : `${activeGenre}, for you`}</h2></div><div className="catalog-controls"><span className="result-count">{filteredMovies.length} FILMS</span><button aria-pressed={sortByRating} className={`sort-button${sortByRating ? ' is-active' : ''}`} onClick={() => setSortByRating((current) => !current)} type="button"><SlidersHorizontal size={15} /> {sortByRating ? 'Top rated' : 'Recently added'} <span>⌄</span></button></div></div>
-          <div className="genre-pills" aria-label="Filter movies by genre">{genres.map((genre) => <button aria-pressed={activeGenre === genre} className={`genre-pill${activeGenre === genre ? ' is-active' : ''}`} key={genre} onClick={() => { setActiveGenre(genre); setShowWatchlist(false) }} type="button">{genre}</button>)}</div>
+          <div className="genre-pills" aria-label="Filter movies by genre">{['All films', ...genres].map((genre) => <button aria-pressed={activeGenre === genre} className={`genre-pill${activeGenre === genre ? ' is-active' : ''}`} key={genre} onClick={() => { setActiveGenre(genre); setShowWatchlist(false) }} type="button">{genre}</button>)}</div>
+          {genresError && <p className="genre-error" role="alert">{genresError}</p>}
           {filteredMovies.length > 0 ? <div className="movie-grid">{filteredMovies.map((movie, index) => {
             const isSaved = savedMovies.includes(movie.id)
             return <article className="movie-card" key={movie.id} style={{ animationDelay: `${index * 55}ms` }}>

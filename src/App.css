@@ -841,6 +841,12 @@
   display: none;
 }
 
+.genre-error {
+  margin: -8px 0 12px;
+  color: #9a5146;
+  font-size: 12px;
+}
+
 .genre-pill {
   flex: 0 0 auto;
   padding: 7px 11px;

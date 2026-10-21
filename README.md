@@ -13,9 +13,9 @@ If the backend is unreachable, the page displays the connection error and a retr
 
 ## API contract
 
-By default the frontend calls `GET /api/movies?limit=30` and `GET /api/comments?movieId=<id>`. Configure the route paths with `VITE_MOVIES_ENDPOINT` and `VITE_COMMENTS_ENDPOINT` if your backend differs. Account registration and login use `POST /api/users` and `POST /api/users/login`; configure `VITE_USERS_ENDPOINT` if the users route differs. Registration sends the username as the backend's `name` field and requires an email and matching password entries. For a deployed frontend, set `VITE_API_BASE_URL` to the API origin and configure the backend to allow that origin; the Vite proxy is for local development only.
+By default the frontend calls `GET /api/movies?limit=30`, `GET /api/movies/genres`, and `GET /api/comments?movieId=<id>`. Configure the route paths with `VITE_MOVIES_ENDPOINT` and `VITE_COMMENTS_ENDPOINT` if your backend differs. Account registration and login use `POST /api/users` and `POST /api/users/login`; configure `VITE_USERS_ENDPOINT` if the users route differs. Registration sends the username as the backend's `name` field and requires an email and matching password entries. For a deployed frontend, set `VITE_API_BASE_URL` to the API origin and configure the backend to allow that origin; the Vite proxy is for local development only.
 
-The backend returns paginated movies in `data`; the adapter maps MFlix fields such as `_id`, `imdb.rating`, `fullplot`, `genres`, `directors`, `cast`, and `poster` to the UI model. Comment lists are fetched using the backend's `movieId` query parameter. Posting comments requires an authenticated backend session, which is not currently managed by this frontend.
+The backend returns paginated movies in `data`; the adapter maps MFlix fields such as `_id`, `imdb.rating`, `fullplot`, `genres`, `directors`, `cast`, and `poster` to the UI model. Genre filters are populated from the backend's distinct genre list, rather than a hard-coded subset. Comment lists are fetched using the backend's `movieId` query parameter. Posting comments requires an authenticated backend session, which is not currently managed by this frontend.
 
 The backend's default port is `5000`. When using a direct API origin instead of the local Vite proxy, the backend must enable CORS for the frontend origin.
 
