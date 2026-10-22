@@ -38,8 +38,11 @@ function jsonResponse(body: unknown, status = 200): Response {
 function stubBackend(authResponses: AuthResponses = {}) {
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
-    if (url.endsWith('/api/movies?limit=30')) return jsonResponse(movieResponse)
     if (url.endsWith('/api/movies/genres')) return jsonResponse({ genres: ['Drama', 'Mystery'] })
+    if (new URL(url).pathname === '/api/movies') return jsonResponse({
+      ...movieResponse,
+      pagination: { page: 1, limit: 30, total: 1, pages: 1, hasNextPage: false, hasPrevPage: false },
+    })
 
     const route: AuthRoute | undefined = url.endsWith('/api/users') && init?.method === 'POST'
       ? 'register'

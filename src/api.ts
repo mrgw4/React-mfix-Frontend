@@ -11,6 +11,25 @@ export type Movie = {
   posterUrl: string
 }
 
+export type MoviePage = {
+  movies: Movie[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    pages: number
+    hasNextPage: boolean
+    hasPrevPage: boolean
+  }
+}
+
+export type MovieQuery = {
+  page?: number
+  genre?: string
+  search?: string
+  sortByRating?: boolean
+}
+
 export type MovieComment = { id: string; name: string; text: string; date: string }
 type CommentInput = { movieId: string; name: string; text: string }
 export type AuthUser = { id: string; name: string; email: string }
@@ -93,9 +112,47 @@ function unwrapList(payload: unknown): unknown[] {
   return []
 }
 
-export async function getMovies(): Promise<Movie[]> {
-  const payload = await request<unknown>(endpointUrl(moviesEndpoint, { limit: '30' }))
-  return unwrapList(payload).map(normalizeMovie)
+export async function getMovies(query: MovieQuery = {}): Promise<MoviePage> {
+  const params: Record<string, string> = {
+    page: String(query.page ?? 1),
+    limit: '30',
+    sort: query.sortByRating ? 'imdbRating' : 'year',
+    order: 'desc',
+  }
+  const search = query.search?.trim()
+  if (search) params.search = search
+  if (query.genre && query.genre !== 'All films') params.genres = query.genre
+
+  const payload = asRecord(await request<unknown>(endpointUrl(moviesEndpoint, params)))
+  const pagination = asRecord(payload.pagination)
+  if (
+    !Array.isArray(payload.data)
+    || typeof pagination.page !== 'number'
+    || typeof pagination.limit !== 'number'
+    || typeof pagination.total !== 'number'
+    || typeof pagination.pages !== 'number'
+    || typeof pagination.hasNextPage !== 'boolean'
+    || typeof pagination.hasPrevPage !== 'boolean'
+  ) {
+    throw new Error('The server returned an invalid movie list response.')
+  }
+
+  return {
+    movies: payload.data.map(normalizeMovie),
+    pagination: {
+      page: pagination.page,
+      limit: pagination.limit,
+      total: pagination.total,
+      pages: pagination.pages,
+      hasNextPage: pagination.hasNextPage,
+      hasPrevPage: pagination.hasPrevPage,
+    },
+  }
+}
+
+export async function getMovie(id: string): Promise<Movie> {
+  const endpoint = `${moviesEndpoint.replace(/\/$/, '')}/${encodeURIComponent(id)}`
+  return normalizeMovie(await request<unknown>(endpointUrl(endpoint)), 0)
 }
 
 export async function getGenres(): Promise<string[]> {

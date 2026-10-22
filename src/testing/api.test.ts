@@ -38,25 +38,44 @@ describe('auth API unit tests', () => {
           cast: ['An Actor'],
           poster: 'poster.jpg',
         }],
-        pagination: { page: 1, limit: 30, total: 1, pages: 1 },
+        pagination: { page: 1, limit: 30, total: 1, pages: 1, hasNextPage: false, hasPrevPage: false },
       }))
 
-      await expect(getMovies()).resolves.toEqual([{
-        id: 'movie-1',
-        title: 'A Movie',
-        year: 2000,
-        genres: ['Drama'],
-        rating: 7.5,
-        runtime: 90,
-        plot: 'A story.',
-        director: 'A Director',
-        cast: ['An Actor'],
-        posterUrl: 'poster.jpg',
-      }])
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining('/api/movies?limit=30'),
-        expect.objectContaining({}),
-      )
+      await expect(getMovies({
+        page: 3,
+        genre: 'Documentary',
+        search: 'Mara',
+        sortByRating: true,
+      })).resolves.toEqual({
+        movies: [{
+          id: 'movie-1',
+          title: 'A Movie',
+          year: 2000,
+          genres: ['Drama'],
+          rating: 7.5,
+          runtime: 90,
+          plot: 'A story.',
+          director: 'A Director',
+          cast: ['An Actor'],
+          posterUrl: 'poster.jpg',
+        }],
+        pagination: {
+          page: 1,
+          limit: 30,
+          total: 1,
+          pages: 1,
+          hasNextPage: false,
+          hasPrevPage: false,
+        },
+      })
+      const requestUrl = new URL(String(fetchMock.mock.calls[0][0]))
+      expect(requestUrl.pathname).toBe('/api/movies')
+      expect(requestUrl.searchParams.get('page')).toBe('3')
+      expect(requestUrl.searchParams.get('limit')).toBe('30')
+      expect(requestUrl.searchParams.get('genres')).toBe('Documentary')
+      expect(requestUrl.searchParams.get('search')).toBe('Mara')
+      expect(requestUrl.searchParams.get('sort')).toBe('imdbRating')
+      expect(requestUrl.searchParams.get('order')).toBe('desc')
     })
 
     it('loads and normalizes genres from the backend genres endpoint', async () => {

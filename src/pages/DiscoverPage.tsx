@@ -1,10 +1,22 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Bookmark, Check, Film, Heart, MessageCircle, Play, Search, Send, SlidersHorizontal, Sparkles, Star, X } from 'lucide-react'
-import { createComment, getComments, getMovies, type Movie, type MovieComment } from '../api'
+import { createComment, getComments, getMovie, getMovies, type Movie, type MovieComment, type MoviePage } from '../api'
 import { useAppShell } from '../layout/AppShellContext'
+
+const emptyPagination: MoviePage['pagination'] = {
+  page: 1,
+  limit: 30,
+  total: 0,
+  pages: 0,
+  hasNextPage: false,
+  hasPrevPage: false,
+}
 
 function DiscoverPage() {
   const [movies, setMovies] = useState<Movie[]>([])
+  const [pagination, setPagination] = useState(emptyPagination)
+  const [page, setPage] = useState(1)
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
@@ -15,21 +27,62 @@ function DiscoverPage() {
   const [commentError, setCommentError] = useState('')
   const [commentLoading, setCommentLoading] = useState(false)
   const { search, genres, genresError, activeGenre, setActiveGenre, sortByRating, setSortByRating, showWatchlist, setShowWatchlist, savedMovies, toggleSaved } = useAppShell()
+  const previousFilters = useRef({ search: debouncedSearch, activeGenre, sortByRating, showWatchlist })
+  const savedMoviesKey = showWatchlist ? savedMovies.join('\u001f') : ''
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedSearch(search.trim()), 300)
+    return () => window.clearTimeout(timeout)
+  }, [search])
 
   useEffect(() => {
     let active = true
-    getMovies().then((results) => {
+    const filters = { search: debouncedSearch, activeGenre, sortByRating, showWatchlist }
+    const filtersChanged = filters.search !== previousFilters.current.search
+      || filters.activeGenre !== previousFilters.current.activeGenre
+      || filters.sortByRating !== previousFilters.current.sortByRating
+      || filters.showWatchlist !== previousFilters.current.showWatchlist
+    previousFilters.current = filters
+    if (filtersChanged && page !== 1) {
+      setIsLoading(true)
+      setMovies([])
+      setPage(1)
+      return () => { active = false }
+    }
+
+    setIsLoading(true)
+    setLoadError('')
+    setMovies([])
+    const watchlistIds = savedMoviesKey ? savedMoviesKey.split('\u001f') : []
+    const loadResults = showWatchlist
+      ? Promise.all(watchlistIds.map((movieId) => getMovie(movieId))).then((results) => ({
+        movies: results,
+        pagination: {
+          page: 1,
+          limit: Math.max(30, results.length),
+          total: results.length,
+          pages: results.length ? 1 : 0,
+          hasNextPage: false,
+          hasPrevPage: false,
+        },
+      }))
+      : getMovies({ page, genre: activeGenre, search: debouncedSearch, sortByRating })
+
+    loadResults.then((result) => {
       if (active) {
-        setMovies(results)
-        setLoadError('')
+        setMovies(result.movies)
+        setPagination(result.pagination)
       }
     }).catch((error: unknown) => {
-      if (active) setLoadError(error instanceof Error ? error.message : 'Could not load films.')
+      if (active) {
+        setMovies([])
+        setLoadError(error instanceof Error ? error.message : 'Could not load films.')
+      }
     }).finally(() => {
       if (active) setIsLoading(false)
     })
     return () => { active = false }
-  }, [reloadKey])
+  }, [page, debouncedSearch, activeGenre, sortByRating, showWatchlist, savedMoviesKey, reloadKey])
 
   useEffect(() => {
     if (!selectedMovie) return
@@ -40,13 +93,9 @@ function DiscoverPage() {
     return () => { active = false }
   }, [selectedMovie])
 
-  const filteredMovies = movies.filter((movie) => {
-    const term = search.trim().toLowerCase()
-    const matchesSearch = !term || [movie.title, movie.director, ...movie.genres].some((value) => value?.toLowerCase().includes(term))
-    const matchesGenre = activeGenre === 'All films' || movie.genres.includes(activeGenre)
-    const matchesWatchlist = !showWatchlist || savedMovies.includes(movie.id)
-    return matchesSearch && matchesGenre && matchesWatchlist
-  }).sort((first, second) => sortByRating ? second.rating - first.rating : second.year - first.year)
+  const filteredMovies = showWatchlist
+    ? [...movies].sort((first, second) => sortByRating ? second.rating - first.rating : second.year - first.year)
+    : movies
   const featuredMovie = movies[0]
 
   function openMovie(movie: Movie) {
@@ -74,13 +123,13 @@ function DiscoverPage() {
   return <div className="content-wrap" id="discover">
         <section className="intro-row"><div><div className="eyebrow"><span className="eyebrow-line" /> THE GOOD STUFF, RIGHT THIS WAY</div><h1>Find your <em>next</em><br />favorite film.</h1><p className="intro-copy">A little bit of everything, picked for your kind of night.</p></div><div className={`connection-status${loadError ? ' is-error' : ''}`}><span className="status-dot" />{isLoading ? 'Loading collection' : loadError ? 'Backend unavailable' : 'Connected to your collection'}</div></section>
         {featuredMovie && <section className="feature-banner" style={{ backgroundImage: `linear-gradient(90deg, rgba(18, 33, 29, .98) 0%, rgba(18, 33, 29, .88) 39%, rgba(18, 33, 29, .08) 100%), url("${featuredMovie.posterUrl || ''}")` }} aria-label="Featured film">
-          <div className="feature-copy"><div className="feature-kicker"><span><Sparkles size={13} /></span> IN THE SPOTLIGHT <i /> FEATURED FILM</div><h2>{featuredMovie.title}</h2><div className="feature-meta"><span>{featuredMovie.year}</span><i /><span>{featuredMovie.genres.slice(0, 2).join(' / ') || 'FEATURED'}</span><i /><span className="feature-rating"><Star size={13} fill="currentColor" /> {featuredMovie.rating.toFixed(1)}</span></div><p>{featuredMovie.plot || 'A story worth staying in for.'}</p><button className="feature-button" onClick={() => openMovie(featuredMovie)} type="button"><Play size={15} fill="currentColor" /> Explore film</button></div><span className="feature-index">01 <i /> {String(movies.length).padStart(2, '0')}</span>
+          <div className="feature-copy"><div className="feature-kicker"><span><Sparkles size={13} /></span> IN THE SPOTLIGHT <i /> FEATURED FILM</div><h2>{featuredMovie.title}</h2><div className="feature-meta"><span>{featuredMovie.year}</span><i /><span>{featuredMovie.genres.slice(0, 2).join(' / ') || 'FEATURED'}</span><i /><span className="feature-rating"><Star size={13} fill="currentColor" /> {featuredMovie.rating.toFixed(1)}</span></div><p>{featuredMovie.plot || 'A story worth staying in for.'}</p><button className="feature-button" onClick={() => openMovie(featuredMovie)} type="button"><Play size={15} fill="currentColor" /> Explore film</button></div><span className="feature-index">01 <i /> {String(pagination.total).padStart(2, '0')}</span>
         </section>}
         <section className="catalog-section" aria-label="Movie catalog">
-          <div className="catalog-heading"><div><div className="eyebrow small-eyebrow">A GOOD PLACE TO START</div><h2>{showWatchlist ? 'Your watchlist' : search ? 'Search results' : activeGenre === 'All films' ? 'A little of everything' : `${activeGenre}, for you`}</h2></div><div className="catalog-controls"><span className="result-count">{filteredMovies.length} FILMS</span><button aria-pressed={sortByRating} className={`sort-button${sortByRating ? ' is-active' : ''}`} onClick={() => setSortByRating((current) => !current)} type="button"><SlidersHorizontal size={15} /> {sortByRating ? 'Top rated' : 'Recently added'} <span>⌄</span></button></div></div>
+          <div className="catalog-heading"><div><div className="eyebrow small-eyebrow">A GOOD PLACE TO START</div><h2>{showWatchlist ? 'Your watchlist' : search ? 'Search results' : activeGenre === 'All films' ? 'A little of everything' : `${activeGenre}, for you`}</h2></div><div className="catalog-controls"><span className="result-count">{pagination.total} FILMS</span><button aria-pressed={sortByRating} className={`sort-button${sortByRating ? ' is-active' : ''}`} onClick={() => setSortByRating((current) => !current)} type="button"><SlidersHorizontal size={15} /> {sortByRating ? 'Top rated' : 'Recently added'} <span>⌄</span></button></div></div>
           <div className="genre-pills" aria-label="Filter movies by genre">{['All films', ...genres].map((genre) => <button aria-pressed={activeGenre === genre} className={`genre-pill${activeGenre === genre ? ' is-active' : ''}`} key={genre} onClick={() => { setActiveGenre(genre); setShowWatchlist(false) }} type="button">{genre}</button>)}</div>
           {genresError && <p className="genre-error" role="alert">{genresError}</p>}
-          {filteredMovies.length > 0 ? <div className="movie-grid">{filteredMovies.map((movie, index) => {
+          {filteredMovies.length > 0 ? <><div className="movie-grid">{filteredMovies.map((movie, index) => {
             const isSaved = savedMovies.includes(movie.id)
             return <article className="movie-card" key={movie.id} style={{ animationDelay: `${index * 55}ms` }}>
               <button className="poster-button" onClick={() => openMovie(movie)} type="button" aria-label={`View ${movie.title}`}>
@@ -89,7 +138,11 @@ function DiscoverPage() {
               </button>
               <div className="movie-info"><div className="movie-title-row"><button className="movie-title" onClick={() => openMovie(movie)} type="button">{movie.title}</button><button aria-label={isSaved ? `Remove ${movie.title} from watchlist` : `Add ${movie.title} to watchlist`} aria-pressed={isSaved} className={`save-button${isSaved ? ' saved' : ''}`} onClick={() => toggleSaved(movie.id)} type="button">{isSaved ? <Check size={15} /> : <Bookmark size={15} />}</button></div><div className="movie-subline"><span>{movie.year || '—'}</span><i />{movie.genres.slice(0, 2).join(' · ')}</div></div>
             </article>
-          })}</div> : <div className="empty-state"><Search size={22} /><strong>{isLoading ? 'Loading films' : loadError ? 'Could not load films' : 'No films found'}</strong><span>{isLoading ? 'Connecting to your collection...' : loadError ? loadError : 'Try another title or clear the genre filter.'}</span>{loadError && <button className="sort-button" onClick={() => { setIsLoading(true); setReloadKey((key) => key + 1) }} type="button">Try again</button>}</div>}
+          })}</div>{!showWatchlist && pagination.pages > 1 && <nav className="pagination-controls" aria-label="Movie pages">
+            <button className="page-button" disabled={!pagination.hasPrevPage || isLoading} onClick={() => setPage((current) => Math.max(1, current - 1))} type="button">Previous</button>
+            <span>Page {pagination.page} of {pagination.pages}</span>
+            <button className="page-button" disabled={!pagination.hasNextPage || isLoading} onClick={() => setPage((current) => current + 1)} type="button">Next</button>
+          </nav>}</> : <div className="empty-state"><Search size={22} /><strong>{isLoading ? 'Loading films' : loadError ? 'Could not load films' : showWatchlist ? 'Your watchlist is empty' : 'No films found'}</strong><span>{isLoading ? 'Connecting to your collection...' : loadError ? loadError : 'Try another title or clear the genre filter.'}</span>{loadError && <button className="sort-button" onClick={() => { setIsLoading(true); setReloadKey((key) => key + 1) }} type="button">Try again</button>}</div>}
         </section>
         <footer className="page-footer"><span>MOSAIC <i /> FILM, FOUND.</span><span>MADE FOR THE LOVE OF A GOOD STORY</span></footer>
     {selectedMovie && <div className="dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setSelectedMovie(null)}>

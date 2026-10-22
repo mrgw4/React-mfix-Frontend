@@ -289,11 +289,60 @@
 }
 
 .genre-label {
-  margin-top: 37px;
+  margin-top: 27px;
+}
+
+.genre-picker {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.genre-search {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 7px;
+  padding: 0 9px;
+  color: #929993;
+  background: #f7f8f4;
+  border: 1px solid #e2e6e1;
+  border-radius: 5px;
+}
+
+.genre-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  color: #18211e;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font: inherit;
+  font-size: 11px;
+}
+
+.genre-search input::placeholder {
+  color: #929993;
+}
+
+.genre-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #cfd8d0 transparent;
+  scrollbar-width: thin;
 }
 
 .genre-link {
-  height: 35px;
+  flex: 0 0 35px;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 11px;
@@ -305,6 +354,22 @@
   text-align: left;
   font-size: 12px;
   cursor: pointer;
+}
+
+.genre-link {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.genre-dot {
+  flex: 0 0 7px;
+}
+
+.genre-no-results {
+  padding: 9px 10px;
+  color: #929993;
+  font-size: 11px;
 }
 
 .genre-link.selected,
@@ -827,6 +892,36 @@
 .sort-button.is-active {
   color: #38644a;
   border-color: #b9d2bd;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 28px 0 4px;
+  color: #707a73;
+  font: 11px 'DM Mono', monospace;
+}
+
+.page-button {
+  min-height: 34px;
+  padding: 0 13px;
+  color: #263c31;
+  background: white;
+  border: 1px solid #dce3dc;
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.page-button:hover:not(:disabled) {
+  background: #f1f4ee;
+}
+
+.page-button:disabled {
+  color: #aeb5ae;
+  cursor: not-allowed;
 }
 
 .genre-pills {
@@ -1404,7 +1499,7 @@
 
   .side-label,
   .side-nav,
-  .genre-nav,
+  .genre-picker,
   .sidebar-note,
   .profile-chip {
     display: none;

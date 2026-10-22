@@ -46,6 +46,9 @@ function getSavedAuthSession(): AuthSession | null {
 type AppSidebarProps = Pick<AppShellContextValue, 'genres' | 'savedMovies' | 'showWatchlist' | 'setShowWatchlist' | 'setSortByRating' | 'activeGenre' | 'setActiveGenre'> & { authSession: AuthSession | null }
 
 function AppSidebar({ genres, savedMovies, showWatchlist, setShowWatchlist, setSortByRating, activeGenre, setActiveGenre, authSession }: AppSidebarProps) {
+  const [genreSearch, setGenreSearch] = useState('')
+  const visibleGenres = genres.filter((genre) => genre.toLowerCase().includes(genreSearch.trim().toLowerCase()))
+
   return <aside className="sidebar">
     <NavLink className="brand" to="/" aria-label="Mosaic home"><span className="brand-mark"><Clapperboard size={20} /></span><span>mosaic<span className="brand-period">.</span></span></NavLink>
     <div className="side-label">YOUR SPACE</div>
@@ -55,9 +58,14 @@ function AppSidebar({ genres, savedMovies, showWatchlist, setShowWatchlist, setS
       <button className={`nav-link${showWatchlist ? ' active' : ''}`} onClick={() => setShowWatchlist((current) => !current)} type="button"><Bookmark size={17} /> Watchlist <span className="nav-count">{savedMovies.length}</span></button>
     </nav>
     <div className="side-label genre-label">BROWSE BY MOOD</div>
-    <nav className="genre-nav" aria-label="Browse by genre">
-      {genres.map((genre) => <button className={`genre-link${activeGenre === genre ? ' selected' : ''}`} key={genre} onClick={() => { setActiveGenre(activeGenre === genre ? 'All films' : genre); setShowWatchlist(false) }} type="button"><span className={`genre-dot dot-${genre.toLowerCase()}`} />{genre}</button>)}
-    </nav>
+    <section className="genre-picker" aria-label="Genre browser">
+      <label className="genre-search"><Search size={14} /><input aria-label="Search genres" onChange={(event) => setGenreSearch(event.target.value)} placeholder="Search genres" type="search" value={genreSearch} /></label>
+      <nav className="genre-nav" aria-label="Browse by genre">
+        <button aria-pressed={activeGenre === 'All films'} className={`genre-link${activeGenre === 'All films' ? ' selected' : ''}`} onClick={() => { setActiveGenre('All films'); setShowWatchlist(false) }} type="button"><span className="genre-dot" />All films</button>
+        {visibleGenres.map((genre) => <button aria-pressed={activeGenre === genre} className={`genre-link${activeGenre === genre ? ' selected' : ''}`} key={genre} onClick={() => { setActiveGenre(activeGenre === genre ? 'All films' : genre); setShowWatchlist(false) }} type="button"><span className={`genre-dot dot-${genre.toLowerCase()}`} />{genre}</button>)}
+        {visibleGenres.length === 0 && <span className="genre-no-results">No matching genres</span>}
+      </nav>
+    </section>
     <div className="sidebar-note"><span className="note-icon"><Film size={16} /></span><p>Your next favorite is out there.</p><span>Keep looking.</span></div>
     <div className="profile-chip"><div className="profile-avatar">{authSession?.user.name.charAt(0).toUpperCase() || 'M'}</div><div><strong>{authSession?.user.name || 'Movie lover'}</strong><span>{authSession?.user.email || 'Guest profile'}</span></div><span className="profile-caret">⌄</span></div>
   </aside>
