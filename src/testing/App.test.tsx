@@ -132,6 +132,19 @@ describe('movie discovery integration', () => {
     expect(screen.getByRole('button', { name: 'The Quiet Between' })).toBeVisible()
   })
 
+  it('returns to discover when its sidebar link is clicked from the watchlist', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'Add The Quiet Between to watchlist' }))
+    await user.click(screen.getByRole('button', { name: /Watchlist/ }))
+    expect(screen.getByRole('heading', { name: 'Your watchlist' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('link', { name: 'Discover' }))
+
+    expect(screen.getByRole('heading', { name: 'A little of everything' })).toBeInTheDocument()
+  })
+
   it('restores saved movies after the app is reopened', async () => {
     const user = userEvent.setup()
     const { unmount } = render(<App />)

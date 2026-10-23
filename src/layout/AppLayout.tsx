@@ -53,7 +53,7 @@ function AppSidebar({ genres, savedMovies, showWatchlist, setShowWatchlist, setS
     <NavLink className="brand" to="/" aria-label="Mosaic home"><span className="brand-mark"><Clapperboard size={20} /></span><span>mosaic<span className="brand-period">.</span></span></NavLink>
     <div className="side-label">YOUR SPACE</div>
     <nav className="side-nav" aria-label="Main navigation">
-      <NavLink className={({ isActive }) => `nav-link${isActive && !showWatchlist ? ' active' : ''}`} to="/"><Sparkles size={17} /> Discover</NavLink>
+      <NavLink className={({ isActive }) => `nav-link${isActive && !showWatchlist ? ' active' : ''}`} onClick={() => setShowWatchlist(false)} to="/"><Sparkles size={17} /> Discover</NavLink>
       <button className="nav-link" onClick={() => { setSortByRating(true); setShowWatchlist(false) }} type="button"><Star size={17} /> Top rated</button>
       <button className={`nav-link${showWatchlist ? ' active' : ''}`} onClick={() => setShowWatchlist((current) => !current)} type="button"><Bookmark size={17} /> Watchlist <span className="nav-count">{savedMovies.length}</span></button>
     </nav>
