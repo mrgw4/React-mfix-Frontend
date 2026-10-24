@@ -77,6 +77,30 @@ describe('movie discovery integration', () => {
     )
   })
 
+  it('selects the active sort order and requests the matching movie sort', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const sortSelect = await screen.findByRole('combobox', { name: 'Sort films' })
+    expect(sortSelect).toHaveValue('recent')
+
+    await user.selectOptions(sortSelect, 'rating')
+
+    expect(sortSelect).toHaveValue('rating')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/[?&]sort=imdbRating/),
+      expect.objectContaining({}),
+    )
+
+    await user.selectOptions(sortSelect, 'recent')
+
+    expect(sortSelect).toHaveValue('recent')
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/[?&]sort=year/),
+      expect.objectContaining({}),
+    )
+  })
+
   it('requests the next page and displays its results', async () => {
     const secondPage = {
       ...movieResponse,

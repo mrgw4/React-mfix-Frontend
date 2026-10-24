@@ -876,7 +876,8 @@
   font: 9px 'DM Mono', monospace;
 }
 
-.sort-button {
+.sort-button,
+.sort-control {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -889,9 +890,28 @@
   cursor: pointer;
 }
 
-.sort-button.is-active {
+.sort-control {
+  cursor: default;
+}
+
+.sort-control.is-active {
   color: #38644a;
   border-color: #b9d2bd;
+}
+
+.sort-select {
+  max-width: 145px;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.sort-select:focus-visible {
+  outline: 2px solid #477f61;
+  outline-offset: 3px;
 }
 
 .pagination-controls {
@@ -1056,6 +1076,7 @@
   background: #d5fa76;
   border-radius: 3px;
   font: 10px 'DM Mono', monospace;
+  white-space: nowrap;
 }
 
 .movie-info {
@@ -1585,12 +1606,14 @@
     display: none;
   }
 
-  .sort-button {
-    font-size: 0;
+  .sort-button,
+  .sort-control {
+    font-size: 10px;
     gap: 5px;
   }
 
-  .sort-button svg {
+  .sort-button svg,
+  .sort-control svg {
     width: 15px;
   }
 
