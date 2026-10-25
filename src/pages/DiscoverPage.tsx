@@ -11,6 +11,7 @@ const emptyPagination: MoviePage['pagination'] = {
   hasNextPage: false,
   hasPrevPage: false,
 }
+const moviesPerPage = 30
 
 function DiscoverPage() {
   const [movies, setMovies] = useState<Movie[]>([])
@@ -54,16 +55,18 @@ function DiscoverPage() {
     setLoadError('')
     setMovies([])
     const watchlistIds = savedMoviesKey ? savedMoviesKey.split('\u001f') : []
+    const watchlistPages = Math.ceil(watchlistIds.length / moviesPerPage)
+    const watchlistPage = Math.min(page, Math.max(watchlistPages, 1))
     const loadResults = showWatchlist
-      ? Promise.all(watchlistIds.map((movieId) => getMovie(movieId))).then((results) => ({
+      ? Promise.all(watchlistIds.slice((watchlistPage - 1) * moviesPerPage, watchlistPage * moviesPerPage).map((movieId) => getMovie(movieId))).then((results) => ({
         movies: results,
         pagination: {
-          page: 1,
-          limit: Math.max(30, results.length),
-          total: results.length,
-          pages: results.length ? 1 : 0,
-          hasNextPage: false,
-          hasPrevPage: false,
+          page: watchlistPage,
+          limit: moviesPerPage,
+          total: watchlistIds.length,
+          pages: watchlistPages,
+          hasNextPage: watchlistPage < watchlistPages,
+          hasPrevPage: watchlistPage > 1,
         },
       }))
       : getMovies({ page, genre: activeGenre, search: debouncedSearch, sortByRating })
@@ -138,10 +141,10 @@ function DiscoverPage() {
               </button>
               <div className="movie-info"><div className="movie-title-row"><button className="movie-title" onClick={() => openMovie(movie)} type="button">{movie.title}</button><button aria-label={isSaved ? `Remove ${movie.title} from watchlist` : `Add ${movie.title} to watchlist`} aria-pressed={isSaved} className={`save-button${isSaved ? ' saved' : ''}`} onClick={() => toggleSaved(movie.id)} type="button">{isSaved ? <Check size={15} /> : <Bookmark size={15} />}</button></div><div className="movie-subline"><span>{movie.year || '—'}</span><i />{movie.genres.slice(0, 2).join(' · ')}</div></div>
             </article>
-          })}</div>{!showWatchlist && pagination.pages > 1 && <nav className="pagination-controls" aria-label="Movie pages">
-            <button className="page-button" disabled={!pagination.hasPrevPage || isLoading} onClick={() => setPage((current) => Math.max(1, current - 1))} type="button">Previous</button>
+          })}</div>{pagination.pages > 1 && <nav className="pagination-controls" aria-label="Movie pages">
+            <button className="page-button" disabled={!pagination.hasPrevPage || isLoading} onClick={() => setPage(pagination.page - 1)} type="button">Previous</button>
             <span>Page {pagination.page} of {pagination.pages}</span>
-            <button className="page-button" disabled={!pagination.hasNextPage || isLoading} onClick={() => setPage((current) => current + 1)} type="button">Next</button>
+            <button className="page-button" disabled={!pagination.hasNextPage || isLoading} onClick={() => setPage(pagination.page + 1)} type="button">Next</button>
           </nav>}</> : <div className="empty-state"><Search size={22} /><strong>{isLoading ? 'Loading films' : loadError ? 'Could not load films' : showWatchlist ? 'Your watchlist is empty' : 'No films found'}</strong><span>{isLoading ? 'Connecting to your collection...' : loadError ? loadError : 'Try another title or clear the genre filter.'}</span>{loadError && <button className="sort-button" onClick={() => { setIsLoading(true); setReloadKey((key) => key + 1) }} type="button">Try again</button>}</div>}
         </section>
         <footer className="page-footer"><span>MOSAIC <i /> FILM, FOUND.</span><span>MADE FOR THE LOVE OF A GOOD STORY</span></footer>

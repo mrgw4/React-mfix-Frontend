@@ -9,7 +9,7 @@ React + TypeScript movie discovery UI for the MFlix API in `Example-Blog-Backend
 3. Copy `.env.example` to `.env.local`; leave `VITE_API_BASE_URL` blank to use the Vite proxy, which forwards `/api` requests to `http://localhost:5000`.
 4. Start the frontend with `npm run dev`.
 
-If the backend is unreachable, the page displays the connection error and a retry action instead of sample data. Movie cards include search, genre filters, sorting, details, and a watchlist persisted in this browser's local storage. The watchlist does not sync across browsers or devices.
+If the backend is unreachable, the page displays the connection error and a retry action instead of sample data. Movie cards include search, genre filters, sorting, details, and a watchlist persisted in this browser's local storage. Watchlist entries are loaded by their saved movie IDs and displayed 30 per page, without needing to fetch the rest of the catalog. The watchlist does not sync across browsers or devices.
 
 ## API contract
 

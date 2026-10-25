@@ -156,6 +156,38 @@ describe('movie discovery integration', () => {
     expect(screen.getByRole('button', { name: 'The Quiet Between' })).toBeVisible()
   })
 
+  it('paginates the watchlist and fetches only the saved movies on the current page', async () => {
+    const savedMovieIds = Array.from({ length: 31 }, (_, index) => `watchlist-${index}`)
+    window.localStorage.setItem('mosaic.watchlist.v1', JSON.stringify(savedMovieIds))
+    const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      const movieId = url.pathname.split('/').pop()
+      const body = url.pathname.endsWith('/genres')
+        ? genresResponse
+        : url.pathname === '/api/movies' ? movieResponse : { ...movieResponse.data[0], _id: movieId, title: `Film ${movieId}` }
+      return { ok: true, json: async () => body }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: /Watchlist/ }))
+
+    expect(await screen.findByRole('button', { name: 'Film watchlist-0' })).toBeVisible()
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Film watchlist-30' })).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([input]) => new URL(String(input)).pathname.endsWith('/watchlist-30'))).toBe(false)
+
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    expect(await screen.findByRole('button', { name: 'Film watchlist-30' })).toBeVisible()
+    expect(screen.getByText('Page 2 of 2')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/movies\/watchlist-30$/),
+      expect.objectContaining({}),
+    )
+  })
+
   it('returns to discover when its sidebar link is clicked from the watchlist', async () => {
     const user = userEvent.setup()
     render(<App />)
