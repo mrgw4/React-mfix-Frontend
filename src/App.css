@@ -946,14 +946,9 @@
 
 .genre-pills {
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
-  overflow-x: auto;
   padding: 17px 0 15px;
-  scrollbar-width: none;
-}
-
-.genre-pills::-webkit-scrollbar {
-  display: none;
 }
 
 .genre-error {
