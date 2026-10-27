@@ -87,6 +87,30 @@ describe('auth API unit tests', () => {
         expect.objectContaining({}),
       )
     })
+
+    it('sends advanced movie criteria and sorting to the backend', async () => {
+      const fetchMock = stubFetch(jsonResponse({
+        data: [],
+        pagination: { page: 1, limit: 30, total: 0, pages: 0, hasNextPage: false, hasPrevPage: false },
+      }))
+
+      await getMovies({
+        title: '  Arrival  ',
+        directors: 'Denis Villeneuve',
+        imdbRatingMin: 7.5,
+        yearMax: 2016,
+        sort: 'metacritic',
+        order: 'asc',
+      })
+
+      const requestUrl = new URL(String(fetchMock.mock.calls[0][0]))
+      expect(requestUrl.searchParams.get('title')).toBe('Arrival')
+      expect(requestUrl.searchParams.get('directors')).toBe('Denis Villeneuve')
+      expect(requestUrl.searchParams.get('imdbRatingMin')).toBe('7.5')
+      expect(requestUrl.searchParams.get('yearMax')).toBe('2016')
+      expect(requestUrl.searchParams.get('sort')).toBe('metacritic')
+      expect(requestUrl.searchParams.get('order')).toBe('asc')
+    })
   })
 
   it('posts credentials and normalizes a valid login session', async () => {

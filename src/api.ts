@@ -28,7 +28,42 @@ export type MovieQuery = {
   genre?: string
   search?: string
   sortByRating?: boolean
+  title?: string
+  plot?: string
+  directors?: string
+  cast?: string
+  rated?: string
+  type?: string
+  yearMin?: number
+  yearMax?: number
+  runtimeMin?: number
+  runtimeMax?: number
+  imdbRatingMin?: number
+  imdbRatingMax?: number
+  metacriticMin?: number
+  metacriticMax?: number
+  sort?: 'title' | 'year' | 'runtime' | 'released' | 'metacritic' | 'imdbRating' | 'tomatoesMeter' | 'tomatoesRating'
+  order?: 'asc' | 'desc'
 }
+
+export type AdvancedMovieFilters = Pick<MovieQuery,
+  | 'title'
+  | 'plot'
+  | 'directors'
+  | 'cast'
+  | 'rated'
+  | 'type'
+  | 'yearMin'
+  | 'yearMax'
+  | 'runtimeMin'
+  | 'runtimeMax'
+  | 'imdbRatingMin'
+  | 'imdbRatingMax'
+  | 'metacriticMin'
+  | 'metacriticMax'
+  | 'sort'
+  | 'order'
+>
 
 export type MovieComment = { id: string; name: string; text: string; date: string }
 type CommentInput = { movieId: string; name: string; text: string }
@@ -122,6 +157,18 @@ export async function getMovies(query: MovieQuery = {}): Promise<MoviePage> {
   const search = query.search?.trim()
   if (search) params.search = search
   if (query.genre && query.genre !== 'All films') params.genres = query.genre
+  for (const key of ['title', 'plot', 'directors', 'cast', 'rated', 'type'] as const) {
+    const value = query[key]?.trim()
+    if (value) params[key] = value
+  }
+  for (const key of ['yearMin', 'yearMax', 'runtimeMin', 'runtimeMax', 'imdbRatingMin', 'imdbRatingMax', 'metacriticMin', 'metacriticMax'] as const) {
+    const value = query[key]
+    if (value !== undefined) params[key] = String(value)
+  }
+  if (query.sort) params.sort = query.sort
+  else params.sort = query.sortByRating ? 'imdbRating' : 'year'
+  if (query.order) params.order = query.order
+  else params.order = 'desc'
 
   const payload = asRecord(await request<unknown>(endpointUrl(moviesEndpoint, params)))
   const pagination = asRecord(payload.pagination)

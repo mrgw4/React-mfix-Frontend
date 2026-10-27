@@ -101,6 +101,52 @@ describe('movie discovery integration', () => {
     )
   })
 
+  it('applies advanced movie criteria to backend search requests', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      return {
+        ok: true,
+        json: async () => url.pathname.endsWith('/genres') ? genresResponse : movieResponse,
+      }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<App />)
+    expect(await screen.findByRole('button', { name: 'The Quiet Between' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Advanced search' }))
+    await user.type(screen.getByLabelText('Title'), 'Quiet')
+    await user.type(screen.getByLabelText('Release year from'), '2020')
+    await user.type(screen.getByLabelText('Minimum IMDb rating'), '8')
+    await user.selectOptions(screen.getByLabelText('Sort results by'), 'imdbRating')
+    await user.selectOptions(screen.getByLabelText('Sort direction'), 'asc')
+    await user.click(screen.getByRole('button', { name: 'Apply filters' }))
+
+    const advancedRequest = fetchMock.mock.calls
+      .map(([input]) => new URL(String(input)))
+      .find((url) => url.pathname === '/api/movies' && url.searchParams.has('title'))
+    expect(advancedRequest?.searchParams.get('title')).toBe('Quiet')
+    expect(advancedRequest?.searchParams.get('yearMin')).toBe('2020')
+    expect(advancedRequest?.searchParams.get('imdbRatingMin')).toBe('8')
+    expect(advancedRequest?.searchParams.get('sort')).toBe('imdbRating')
+    expect(advancedRequest?.searchParams.get('order')).toBe('asc')
+    expect(screen.getByText('Advanced filters applied')).toBeInTheDocument()
+  })
+
+  it('prevents advanced searches with an inverted year range', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await screen.findByRole('button', { name: 'The Quiet Between' })
+    await user.click(screen.getByRole('button', { name: 'Advanced search' }))
+    await user.type(screen.getByLabelText('Release year from'), '2025')
+    await user.type(screen.getByLabelText('Release year to'), '2020')
+    await user.click(screen.getByRole('button', { name: 'Apply filters' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Minimum year must be no greater than maximum year.')
+    expect(screen.queryByText('Advanced filters applied')).not.toBeInTheDocument()
+  })
+
   it('requests the next page and displays its results', async () => {
     const secondPage = {
       ...movieResponse,

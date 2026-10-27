@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Bookmark, Check, Film, Heart, MessageCircle, Play, Search, Send, SlidersHorizontal, Sparkles, Star, X } from 'lucide-react'
-import { createComment, getComments, getMovie, getMovies, type Movie, type MovieComment, type MoviePage } from '../api'
+import { createComment, getComments, getMovie, getMovies, type AdvancedMovieFilters, type Movie, type MovieComment, type MoviePage } from '../api'
 import { useAppShell } from '../layout/AppShellContext'
 
 const emptyPagination: MoviePage['pagination'] = {
@@ -12,6 +12,30 @@ const emptyPagination: MoviePage['pagination'] = {
   hasPrevPage: false,
 }
 const moviesPerPage = 30
+type AdvancedSearchDraft = {
+  [Field in Exclude<keyof AdvancedMovieFilters, 'sort' | 'order'>]: string
+} & {
+  sort: '' | NonNullable<AdvancedMovieFilters['sort']>
+  order: NonNullable<AdvancedMovieFilters['order']>
+}
+const emptyAdvancedSearch: AdvancedSearchDraft = {
+  title: '',
+  plot: '',
+  directors: '',
+  cast: '',
+  rated: '',
+  type: '',
+  yearMin: '',
+  yearMax: '',
+  runtimeMin: '',
+  runtimeMax: '',
+  imdbRatingMin: '',
+  imdbRatingMax: '',
+  metacriticMin: '',
+  metacriticMax: '',
+  sort: '',
+  order: 'desc',
+}
 
 function DiscoverPage() {
   const [movies, setMovies] = useState<Movie[]>([])
@@ -27,8 +51,13 @@ function DiscoverPage() {
   const [commentText, setCommentText] = useState('')
   const [commentError, setCommentError] = useState('')
   const [commentLoading, setCommentLoading] = useState(false)
+  const [advancedSearchOpen, setAdvancedSearchOpen] = useState(false)
+  const [advancedSearchDraft, setAdvancedSearchDraft] = useState<AdvancedSearchDraft>(emptyAdvancedSearch)
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedMovieFilters>({})
+  const [advancedSearchError, setAdvancedSearchError] = useState('')
   const { search, genres, genresError, activeGenre, setActiveGenre, sortByRating, setSortByRating, showWatchlist, setShowWatchlist, savedMovies, toggleSaved } = useAppShell()
-  const previousFilters = useRef({ search: debouncedSearch, activeGenre, sortByRating, showWatchlist })
+  const advancedFiltersKey = JSON.stringify(advancedFilters)
+  const previousFilters = useRef({ search: debouncedSearch, activeGenre, sortByRating, showWatchlist, advancedFiltersKey })
   const savedMoviesKey = showWatchlist ? savedMovies.join('\u001f') : ''
 
   useEffect(() => {
@@ -43,7 +72,8 @@ function DiscoverPage() {
       || filters.activeGenre !== previousFilters.current.activeGenre
       || filters.sortByRating !== previousFilters.current.sortByRating
       || filters.showWatchlist !== previousFilters.current.showWatchlist
-    previousFilters.current = filters
+      || advancedFiltersKey !== previousFilters.current.advancedFiltersKey
+    previousFilters.current = { ...filters, advancedFiltersKey }
     if (filtersChanged && page !== 1) {
       setIsLoading(true)
       setMovies([])
@@ -69,7 +99,7 @@ function DiscoverPage() {
           hasPrevPage: watchlistPage > 1,
         },
       }))
-      : getMovies({ page, genre: activeGenre, search: debouncedSearch, sortByRating })
+      : getMovies({ page, genre: activeGenre, search: debouncedSearch, sortByRating, ...advancedFilters })
 
     loadResults.then((result) => {
       if (active) {
@@ -85,7 +115,7 @@ function DiscoverPage() {
       if (active) setIsLoading(false)
     })
     return () => { active = false }
-  }, [page, debouncedSearch, activeGenre, sortByRating, showWatchlist, savedMoviesKey, reloadKey])
+  }, [page, debouncedSearch, activeGenre, sortByRating, showWatchlist, savedMoviesKey, reloadKey, advancedFilters, advancedFiltersKey])
 
   useEffect(() => {
     if (!selectedMovie) return
@@ -105,6 +135,55 @@ function DiscoverPage() {
     setComments([])
     setCommentError('')
     setSelectedMovie(movie)
+  }
+
+  function updateAdvancedSearchField(field: keyof AdvancedSearchDraft, value: string) {
+    setAdvancedSearchDraft((current) => ({ ...current, [field]: value }))
+  }
+
+  function submitAdvancedSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const ranges = [
+      ['yearMin', 'yearMax', 'Minimum year must be no greater than maximum year.'],
+      ['runtimeMin', 'runtimeMax', 'Minimum runtime must be no greater than maximum runtime.'],
+      ['imdbRatingMin', 'imdbRatingMax', 'Minimum IMDb rating must be no greater than maximum rating.'],
+      ['metacriticMin', 'metacriticMax', 'Minimum Metacritic score must be no greater than maximum score.'],
+    ] as const
+    for (const [minimumKey, maximumKey, message] of ranges) {
+      const minimum = advancedSearchDraft[minimumKey]
+      const maximum = advancedSearchDraft[maximumKey]
+      if (minimum && maximum && Number(minimum) > Number(maximum)) {
+        setAdvancedSearchError(message)
+        return
+      }
+    }
+
+    const filters: AdvancedMovieFilters = {}
+    for (const field of ['title', 'plot', 'directors', 'cast', 'rated', 'type'] as const) {
+      const value = advancedSearchDraft[field].trim()
+      if (value) filters[field] = value
+    }
+    for (const field of ['yearMin', 'yearMax', 'runtimeMin', 'runtimeMax', 'imdbRatingMin', 'imdbRatingMax', 'metacriticMin', 'metacriticMax'] as const) {
+      const value = advancedSearchDraft[field]
+      if (value) filters[field] = Number(value)
+    }
+    if (advancedSearchDraft.sort) {
+      filters.sort = advancedSearchDraft.sort
+      filters.order = advancedSearchDraft.order
+    }
+
+    setAdvancedSearchError('')
+    setAdvancedFilters(filters)
+    setShowWatchlist(false)
+    setPage(1)
+  }
+
+  function clearAdvancedSearch() {
+    setAdvancedSearchDraft(emptyAdvancedSearch)
+    setAdvancedSearchError('')
+    setAdvancedFilters({})
+    setShowWatchlist(false)
+    setPage(1)
   }
 
   async function submitComment(event: FormEvent<HTMLFormElement>) {
@@ -129,8 +208,54 @@ function DiscoverPage() {
           <div className="feature-copy"><div className="feature-kicker"><span><Sparkles size={13} /></span> IN THE SPOTLIGHT <i /> FEATURED FILM</div><h2>{featuredMovie.title}</h2><div className="feature-meta"><span>{featuredMovie.year}</span><i /><span>{featuredMovie.genres.slice(0, 2).join(' / ') || 'FEATURED'}</span><i /><span className="feature-rating"><Star size={13} fill="currentColor" /> {featuredMovie.rating.toFixed(1)}</span></div><p>{featuredMovie.plot || 'A story worth staying in for.'}</p><button className="feature-button" onClick={() => openMovie(featuredMovie)} type="button"><Play size={15} fill="currentColor" /> Explore film</button></div><span className="feature-index">01 <i /> {String(pagination.total).padStart(2, '0')}</span>
         </section>}
         <section className="catalog-section" aria-label="Movie catalog">
-          <div className="catalog-heading"><div><div className="eyebrow small-eyebrow">A GOOD PLACE TO START</div><h2>{showWatchlist ? 'Your watchlist' : search ? 'Search results' : activeGenre === 'All films' ? 'A little of everything' : `${activeGenre}, for you`}</h2></div><div className="catalog-controls"><span className="result-count">{pagination.total} FILMS</span><label className={`sort-control${sortByRating ? ' is-active' : ''}`}><SlidersHorizontal aria-hidden="true" size={15} /><select aria-label="Sort films" className="sort-select" onChange={(event) => setSortByRating(event.target.value === 'rating')} value={sortByRating ? 'rating' : 'recent'}><option value="recent">Recently added</option><option value="rating">Top rated</option></select></label></div></div>
+          <div className="catalog-heading"><div><div className="eyebrow small-eyebrow">A GOOD PLACE TO START</div><h2>{showWatchlist ? 'Your watchlist' : search || Object.keys(advancedFilters).length ? 'Search results' : activeGenre === 'All films' ? 'A little of everything' : `${activeGenre}, for you`}</h2></div><div className="catalog-controls"><span className="result-count">{pagination.total} FILMS</span><label className={`sort-control${sortByRating ? ' is-active' : ''}`}><SlidersHorizontal aria-hidden="true" size={15} /><select aria-label="Sort films" className="sort-select" onChange={(event) => setSortByRating(event.target.value === 'rating')} value={sortByRating ? 'rating' : 'recent'}><option value="recent">Recently added</option><option value="rating">Top rated</option></select></label></div></div>
           <div className="genre-pills" aria-label="Filter movies by genre">{['All films', ...genres].map((genre) => <button aria-pressed={activeGenre === genre} className={`genre-pill${activeGenre === genre ? ' is-active' : ''}`} key={genre} onClick={() => { setActiveGenre(genre); setShowWatchlist(false) }} type="button">{genre}</button>)}</div>
+          <div className="advanced-search-tools">
+            <button aria-controls="advanced-search-panel" aria-expanded={advancedSearchOpen} className={`advanced-search-toggle${advancedSearchOpen ? ' is-open' : ''}`} onClick={() => setAdvancedSearchOpen((open) => !open)} type="button">
+              <SlidersHorizontal aria-hidden="true" size={14} /> Advanced search
+            </button>
+            {Object.keys(advancedFilters).length > 0 && <span className="advanced-search-active">Advanced filters applied</span>}
+          </div>
+          {advancedSearchOpen && <form className="advanced-search-panel" id="advanced-search-panel" onSubmit={submitAdvancedSearch}>
+            <div className="advanced-search-heading">
+              <div><strong>Find a film by its details</strong><span>Filters are matched against the complete movie collection.</span></div>
+              <button className="advanced-search-clear" onClick={clearAdvancedSearch} type="button">Clear filters</button>
+            </div>
+            <div className="advanced-search-fields">
+              <label className="advanced-search-field">Title<input maxLength={150} onChange={(event) => updateAdvancedSearchField('title', event.target.value)} placeholder="Film title" value={advancedSearchDraft.title} /></label>
+              <label className="advanced-search-field">Plot<input maxLength={200} onChange={(event) => updateAdvancedSearchField('plot', event.target.value)} placeholder="Story or subject" value={advancedSearchDraft.plot} /></label>
+              <label className="advanced-search-field">Director<input maxLength={100} onChange={(event) => updateAdvancedSearchField('directors', event.target.value)} placeholder="Director name" value={advancedSearchDraft.directors} /></label>
+              <label className="advanced-search-field">Cast member<input maxLength={100} onChange={(event) => updateAdvancedSearchField('cast', event.target.value)} placeholder="Actor name" value={advancedSearchDraft.cast} /></label>
+              <label className="advanced-search-field">Content rating<input maxLength={20} onChange={(event) => updateAdvancedSearchField('rated', event.target.value)} placeholder="e.g. PG-13" value={advancedSearchDraft.rated} /></label>
+              <label className="advanced-search-field">Movie type<input maxLength={30} onChange={(event) => updateAdvancedSearchField('type', event.target.value)} placeholder="e.g. movie" value={advancedSearchDraft.type} /></label>
+              <fieldset className="advanced-search-range">
+                <legend>Release year</legend>
+                <label>From<input aria-label="Release year from" inputMode="numeric" min="0" onChange={(event) => updateAdvancedSearchField('yearMin', event.target.value)} step="1" type="number" value={advancedSearchDraft.yearMin} /></label>
+                <label>To<input aria-label="Release year to" inputMode="numeric" min="0" onChange={(event) => updateAdvancedSearchField('yearMax', event.target.value)} step="1" type="number" value={advancedSearchDraft.yearMax} /></label>
+              </fieldset>
+              <fieldset className="advanced-search-range">
+                <legend>Runtime (minutes)</legend>
+                <label>Min<input aria-label="Minimum runtime" inputMode="numeric" min="0" onChange={(event) => updateAdvancedSearchField('runtimeMin', event.target.value)} step="1" type="number" value={advancedSearchDraft.runtimeMin} /></label>
+                <label>Max<input aria-label="Maximum runtime" inputMode="numeric" min="0" onChange={(event) => updateAdvancedSearchField('runtimeMax', event.target.value)} step="1" type="number" value={advancedSearchDraft.runtimeMax} /></label>
+              </fieldset>
+              <fieldset className="advanced-search-range">
+                <legend>IMDb rating (0–10)</legend>
+                <label>Min<input aria-label="Minimum IMDb rating" max="10" min="0" onChange={(event) => updateAdvancedSearchField('imdbRatingMin', event.target.value)} step="0.1" type="number" value={advancedSearchDraft.imdbRatingMin} /></label>
+                <label>Max<input aria-label="Maximum IMDb rating" max="10" min="0" onChange={(event) => updateAdvancedSearchField('imdbRatingMax', event.target.value)} step="0.1" type="number" value={advancedSearchDraft.imdbRatingMax} /></label>
+              </fieldset>
+              <fieldset className="advanced-search-range">
+                <legend>Metacritic score (0–100)</legend>
+                <label>Min<input aria-label="Minimum Metacritic score" max="100" min="0" onChange={(event) => updateAdvancedSearchField('metacriticMin', event.target.value)} step="1" type="number" value={advancedSearchDraft.metacriticMin} /></label>
+                <label>Max<input aria-label="Maximum Metacritic score" max="100" min="0" onChange={(event) => updateAdvancedSearchField('metacriticMax', event.target.value)} step="1" type="number" value={advancedSearchDraft.metacriticMax} /></label>
+              </fieldset>
+              <label className="advanced-search-field">Sort results by<select onChange={(event) => updateAdvancedSearchField('sort', event.target.value)} value={advancedSearchDraft.sort}>
+                <option value="">Use catalog sort</option><option value="title">Title</option><option value="year">Release year</option><option value="runtime">Runtime</option><option value="released">Release date</option><option value="metacritic">Metacritic score</option><option value="imdbRating">IMDb rating</option>
+              </select></label>
+              <label className="advanced-search-field">Sort direction<select onChange={(event) => updateAdvancedSearchField('order', event.target.value)} value={advancedSearchDraft.order}><option value="desc">Highest / newest first</option><option value="asc">Lowest / oldest first</option></select></label>
+            </div>
+            {advancedSearchError && <p className="advanced-search-error" role="alert">{advancedSearchError}</p>}
+            <div className="advanced-search-actions"><button className="advanced-search-submit" type="submit">Apply filters</button></div>
+          </form>}
           {genresError && <p className="genre-error" role="alert">{genresError}</p>}
           {filteredMovies.length > 0 ? <><div className="movie-grid">{filteredMovies.map((movie, index) => {
             const isSaved = savedMovies.includes(movie.id)
