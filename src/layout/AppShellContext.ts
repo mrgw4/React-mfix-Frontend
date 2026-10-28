@@ -5,8 +5,8 @@ export type AppShellContextValue = {
   setSearch: Dispatch<SetStateAction<string>>
   genres: string[]
   genresError: string
-  activeGenre: string
-  setActiveGenre: Dispatch<SetStateAction<string>>
+  activeGenres: string[]
+  setActiveGenres: Dispatch<SetStateAction<string[]>>
   sortByRating: boolean
   setSortByRating: Dispatch<SetStateAction<boolean>>
   showWatchlist: boolean

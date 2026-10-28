@@ -25,7 +25,7 @@ export type MoviePage = {
 
 export type MovieQuery = {
   page?: number
-  genre?: string
+  genres?: string[]
   search?: string
   sortByRating?: boolean
   title?: string
@@ -156,7 +156,7 @@ export async function getMovies(query: MovieQuery = {}): Promise<MoviePage> {
   }
   const search = query.search?.trim()
   if (search) params.search = search
-  if (query.genre && query.genre !== 'All films') params.genres = query.genre
+  if (query.genres?.length) params.genres = query.genres.join(',')
   for (const key of ['title', 'plot', 'directors', 'cast', 'rated', 'type'] as const) {
     const value = query[key]?.trim()
     if (value) params[key] = value

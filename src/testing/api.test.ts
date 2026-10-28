@@ -43,7 +43,7 @@ describe('auth API unit tests', () => {
 
       await expect(getMovies({
         page: 3,
-        genre: 'Documentary',
+        genres: ['Documentary', 'Drama'],
         search: 'Mara',
         sortByRating: true,
       })).resolves.toEqual({
@@ -72,7 +72,7 @@ describe('auth API unit tests', () => {
       expect(requestUrl.pathname).toBe('/api/movies')
       expect(requestUrl.searchParams.get('page')).toBe('3')
       expect(requestUrl.searchParams.get('limit')).toBe('30')
-      expect(requestUrl.searchParams.get('genres')).toBe('Documentary')
+      expect(requestUrl.searchParams.get('genres')).toBe('Documentary,Drama')
       expect(requestUrl.searchParams.get('search')).toBe('Mara')
       expect(requestUrl.searchParams.get('sort')).toBe('imdbRating')
       expect(requestUrl.searchParams.get('order')).toBe('desc')

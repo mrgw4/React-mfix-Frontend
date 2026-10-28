@@ -55,9 +55,10 @@ function DiscoverPage() {
   const [advancedSearchDraft, setAdvancedSearchDraft] = useState<AdvancedSearchDraft>(emptyAdvancedSearch)
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedMovieFilters>({})
   const [advancedSearchError, setAdvancedSearchError] = useState('')
-  const { search, genres, genresError, activeGenre, setActiveGenre, sortByRating, setSortByRating, showWatchlist, setShowWatchlist, savedMovies, toggleSaved } = useAppShell()
+  const { search, genres, genresError, activeGenres, setActiveGenres, sortByRating, setSortByRating, showWatchlist, setShowWatchlist, savedMovies, toggleSaved } = useAppShell()
   const advancedFiltersKey = JSON.stringify(advancedFilters)
-  const previousFilters = useRef({ search: debouncedSearch, activeGenre, sortByRating, showWatchlist, advancedFiltersKey })
+  const activeGenresKey = JSON.stringify(activeGenres)
+  const previousFilters = useRef({ search: debouncedSearch, activeGenresKey, sortByRating, showWatchlist, advancedFiltersKey })
   const savedMoviesKey = showWatchlist ? savedMovies.join('\u001f') : ''
 
   useEffect(() => {
@@ -67,9 +68,9 @@ function DiscoverPage() {
 
   useEffect(() => {
     let active = true
-    const filters = { search: debouncedSearch, activeGenre, sortByRating, showWatchlist }
+    const filters = { search: debouncedSearch, activeGenresKey, sortByRating, showWatchlist }
     const filtersChanged = filters.search !== previousFilters.current.search
-      || filters.activeGenre !== previousFilters.current.activeGenre
+      || filters.activeGenresKey !== previousFilters.current.activeGenresKey
       || filters.sortByRating !== previousFilters.current.sortByRating
       || filters.showWatchlist !== previousFilters.current.showWatchlist
       || advancedFiltersKey !== previousFilters.current.advancedFiltersKey
@@ -99,7 +100,7 @@ function DiscoverPage() {
           hasPrevPage: watchlistPage > 1,
         },
       }))
-      : getMovies({ page, genre: activeGenre, search: debouncedSearch, sortByRating, ...advancedFilters })
+      : getMovies({ page, genres: activeGenres, search: debouncedSearch, sortByRating, ...advancedFilters })
 
     loadResults.then((result) => {
       if (active) {
@@ -115,7 +116,7 @@ function DiscoverPage() {
       if (active) setIsLoading(false)
     })
     return () => { active = false }
-  }, [page, debouncedSearch, activeGenre, sortByRating, showWatchlist, savedMoviesKey, reloadKey, advancedFilters, advancedFiltersKey])
+  }, [page, debouncedSearch, activeGenres, activeGenresKey, sortByRating, showWatchlist, savedMoviesKey, reloadKey, advancedFilters, advancedFiltersKey])
 
   useEffect(() => {
     if (!selectedMovie) return
@@ -208,8 +209,15 @@ function DiscoverPage() {
           <div className="feature-copy"><div className="feature-kicker"><span><Sparkles size={13} /></span> IN THE SPOTLIGHT <i /> FEATURED FILM</div><h2>{featuredMovie.title}</h2><div className="feature-meta"><span>{featuredMovie.year}</span><i /><span>{featuredMovie.genres.slice(0, 2).join(' / ') || 'FEATURED'}</span><i /><span className="feature-rating"><Star size={13} fill="currentColor" /> {featuredMovie.rating.toFixed(1)}</span></div><p>{featuredMovie.plot || 'A story worth staying in for.'}</p><button className="feature-button" onClick={() => openMovie(featuredMovie)} type="button"><Play size={15} fill="currentColor" /> Explore film</button></div><span className="feature-index">01 <i /> {String(pagination.total).padStart(2, '0')}</span>
         </section>}
         <section className="catalog-section" aria-label="Movie catalog">
-          <div className="catalog-heading"><div><div className="eyebrow small-eyebrow">A GOOD PLACE TO START</div><h2>{showWatchlist ? 'Your watchlist' : search || Object.keys(advancedFilters).length ? 'Search results' : activeGenre === 'All films' ? 'A little of everything' : `${activeGenre}, for you`}</h2></div><div className="catalog-controls"><span className="result-count">{pagination.total} FILMS</span><label className={`sort-control${sortByRating ? ' is-active' : ''}`}><SlidersHorizontal aria-hidden="true" size={15} /><select aria-label="Sort films" className="sort-select" onChange={(event) => setSortByRating(event.target.value === 'rating')} value={sortByRating ? 'rating' : 'recent'}><option value="recent">Recently added</option><option value="rating">Top rated</option></select></label></div></div>
-          <div className="genre-pills" aria-label="Filter movies by genre">{['All films', ...genres].map((genre) => <button aria-pressed={activeGenre === genre} className={`genre-pill${activeGenre === genre ? ' is-active' : ''}`} key={genre} onClick={() => { setActiveGenre(genre); setShowWatchlist(false) }} type="button">{genre}</button>)}</div>
+          <div className="catalog-heading"><div><div className="eyebrow small-eyebrow">A GOOD PLACE TO START</div><h2>{showWatchlist ? 'Your watchlist' : search || Object.keys(advancedFilters).length ? 'Search results' : activeGenres.length === 0 ? 'A little of everything' : `${activeGenres.join(' + ')}, for you`}</h2></div><div className="catalog-controls"><span className="result-count">{pagination.total} FILMS</span><label className={`sort-control${sortByRating ? ' is-active' : ''}`}><SlidersHorizontal aria-hidden="true" size={15} /><select aria-label="Sort films" className="sort-select" onChange={(event) => setSortByRating(event.target.value === 'rating')} value={sortByRating ? 'rating' : 'recent'}><option value="recent">Recently added</option><option value="rating">Top rated</option></select></label></div></div>
+          <div className="genre-pills" aria-label="Filter movies by genre">{['All films', ...genres].map((genre) => {
+            const selected = genre === 'All films' ? activeGenres.length === 0 : activeGenres.includes(genre)
+            return <button aria-pressed={selected} className={`genre-pill${selected ? ' is-active' : ''}`} key={genre} onClick={() => {
+              if (genre === 'All films') setActiveGenres([])
+              else setActiveGenres((current) => current.includes(genre) ? current.filter((selectedGenre) => selectedGenre !== genre) : [...current, genre])
+              setShowWatchlist(false)
+            }} type="button">{genre}</button>
+          })}</div>
           <div className="advanced-search-tools">
             <button aria-controls="advanced-search-panel" aria-expanded={advancedSearchOpen} className={`advanced-search-toggle${advancedSearchOpen ? ' is-open' : ''}`} onClick={() => setAdvancedSearchOpen((open) => !open)} type="button">
               <SlidersHorizontal aria-hidden="true" size={14} /> Advanced search

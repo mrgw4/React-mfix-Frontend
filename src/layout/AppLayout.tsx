@@ -43,9 +43,9 @@ function getSavedAuthSession(): AuthSession | null {
   }
 }
 
-type AppSidebarProps = Pick<AppShellContextValue, 'genres' | 'savedMovies' | 'showWatchlist' | 'setShowWatchlist' | 'setSortByRating' | 'activeGenre' | 'setActiveGenre'> & { authSession: AuthSession | null }
+type AppSidebarProps = Pick<AppShellContextValue, 'genres' | 'savedMovies' | 'showWatchlist' | 'setShowWatchlist' | 'setSortByRating' | 'activeGenres' | 'setActiveGenres'> & { authSession: AuthSession | null }
 
-function AppSidebar({ genres, savedMovies, showWatchlist, setShowWatchlist, setSortByRating, activeGenre, setActiveGenre, authSession }: AppSidebarProps) {
+function AppSidebar({ genres, savedMovies, showWatchlist, setShowWatchlist, setSortByRating, activeGenres, setActiveGenres, authSession }: AppSidebarProps) {
   const [genreSearch, setGenreSearch] = useState('')
   const visibleGenres = genres.filter((genre) => genre.toLowerCase().includes(genreSearch.trim().toLowerCase()))
 
@@ -61,8 +61,8 @@ function AppSidebar({ genres, savedMovies, showWatchlist, setShowWatchlist, setS
     <section className="genre-picker" aria-label="Genre browser">
       <label className="genre-search"><Search size={14} /><input aria-label="Search genres" onChange={(event) => setGenreSearch(event.target.value)} placeholder="Search genres" type="search" value={genreSearch} /></label>
       <nav className="genre-nav" aria-label="Browse by genre">
-        <button aria-pressed={activeGenre === 'All films'} className={`genre-link${activeGenre === 'All films' ? ' selected' : ''}`} onClick={() => { setActiveGenre('All films'); setShowWatchlist(false) }} type="button"><span className="genre-dot" />All films</button>
-        {visibleGenres.map((genre) => <button aria-pressed={activeGenre === genre} className={`genre-link${activeGenre === genre ? ' selected' : ''}`} key={genre} onClick={() => { setActiveGenre(activeGenre === genre ? 'All films' : genre); setShowWatchlist(false) }} type="button"><span className={`genre-dot dot-${genre.toLowerCase()}`} />{genre}</button>)}
+        <button aria-pressed={activeGenres.length === 0} className={`genre-link${activeGenres.length === 0 ? ' selected' : ''}`} onClick={() => { setActiveGenres([]); setShowWatchlist(false) }} type="button"><span className="genre-dot" />All films</button>
+        {visibleGenres.map((genre) => <button aria-pressed={activeGenres.includes(genre)} className={`genre-link${activeGenres.includes(genre) ? ' selected' : ''}`} key={genre} onClick={() => { setActiveGenres((current) => current.includes(genre) ? current.filter((selectedGenre) => selectedGenre !== genre) : [...current, genre]); setShowWatchlist(false) }} type="button"><span className={`genre-dot dot-${genre.toLowerCase()}`} />{genre}</button>)}
         {visibleGenres.length === 0 && <span className="genre-no-results">No matching genres</span>}
       </nav>
     </section>
@@ -215,7 +215,7 @@ export default function AppLayout() {
   const [search, setSearch] = useState('')
   const [genres, setGenres] = useState<string[]>([])
   const [genresError, setGenresError] = useState('')
-  const [activeGenre, setActiveGenre] = useState('All films')
+  const [activeGenres, setActiveGenres] = useState<string[]>([])
   const [sortByRating, setSortByRating] = useState(false)
   const [showWatchlist, setShowWatchlist] = useState(false)
   const [savedMovies, setSavedMovies] = useState<string[]>(getSavedMovieIds)
@@ -253,8 +253,8 @@ export default function AppLayout() {
     setSearch,
     genres,
     genresError,
-    activeGenre,
-    setActiveGenre,
+    activeGenres,
+    setActiveGenres,
     sortByRating,
     setSortByRating,
     showWatchlist,
@@ -271,8 +271,8 @@ export default function AppLayout() {
         showWatchlist={showWatchlist}
         setShowWatchlist={setShowWatchlist}
         setSortByRating={setSortByRating}
-        activeGenre={activeGenre}
-        setActiveGenre={setActiveGenre}
+        activeGenres={activeGenres}
+        setActiveGenres={setActiveGenres}
         authSession={authSession}
       />
       <main id="top" className="main-content">

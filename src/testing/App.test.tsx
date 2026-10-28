@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
@@ -73,6 +73,40 @@ describe('movie discovery integration', () => {
     expect(await screen.findByRole('button', { name: 'A Distant Voice' })).toBeVisible()
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(/[?&]genres=Documentary/),
+      expect.objectContaining({}),
+    )
+  })
+
+  it('combines multiple selected genre pills with an AND filter', async () => {
+    const combinedResponse = {
+      ...movieResponse,
+      data: [{
+        ...movieResponse.data[0],
+        _id: 'combined-genre-movie',
+        title: 'Drama and Mystery',
+      }],
+    }
+    const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      const body = url.pathname.endsWith('/genres')
+        ? genresResponse
+        : url.searchParams.get('genres') === 'Drama,Mystery' ? combinedResponse : movieResponse
+      return { ok: true, json: async () => body }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+
+    render(<App />)
+    expect(await screen.findByRole('button', { name: 'The Quiet Between' })).toBeVisible()
+    const genrePills = within(screen.getByLabelText('Filter movies by genre'))
+    await user.click(genrePills.getByRole('button', { name: 'Drama' }))
+    await user.click(genrePills.getByRole('button', { name: 'Mystery' }))
+
+    expect(await screen.findByRole('button', { name: 'Drama and Mystery' })).toBeVisible()
+    expect(genrePills.getByRole('button', { name: 'Drama' })).toHaveAttribute('aria-pressed', 'true')
+    expect(genrePills.getByRole('button', { name: 'Mystery' })).toHaveAttribute('aria-pressed', 'true')
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/[?&]genres=Drama%2CMystery/),
       expect.objectContaining({}),
     )
   })
