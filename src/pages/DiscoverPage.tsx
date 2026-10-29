@@ -37,6 +37,74 @@ const emptyAdvancedSearch: AdvancedSearchDraft = {
   order: 'desc',
 }
 
+function matchesText(value: string, filter: string) {
+  return value.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase())
+}
+
+function filterWatchlistMovies(movies: Movie[], options: {
+  search: string
+  genres: string[]
+  filters: AdvancedMovieFilters
+}) {
+  const search = options.search.trim()
+  return movies.filter((movie) => {
+    if (search && ![
+      movie.title,
+      movie.plot,
+      movie.director,
+      ...movie.cast,
+      ...movie.genres,
+      String(movie.year),
+    ].some((value) => matchesText(value, search))) return false
+    if (!options.genres.every((genre) => movie.genres.includes(genre))) return false
+
+    const textFilters = [
+      [movie.title, options.filters.title],
+      [movie.plot, options.filters.plot],
+      [movie.director, options.filters.directors],
+      [movie.cast.join(' '), options.filters.cast],
+      [movie.rated, options.filters.rated],
+      [movie.type, options.filters.type],
+    ] as const
+    if (textFilters.some(([value, filter]) => filter && !matchesText(value, filter))) return false
+
+    const rangeFilters = [
+      [movie.year, options.filters.yearMin, options.filters.yearMax],
+      [movie.runtime, options.filters.runtimeMin, options.filters.runtimeMax],
+      [movie.rating, options.filters.imdbRatingMin, options.filters.imdbRatingMax],
+      [movie.metacritic, options.filters.metacriticMin, options.filters.metacriticMax],
+    ] as const
+    return rangeFilters.every(([value, minimum, maximum]) => {
+      if (minimum === undefined && maximum === undefined) return true
+      if (value === null || value <= 0) return false
+      return (minimum === undefined || value >= minimum) && (maximum === undefined || value <= maximum)
+    })
+  })
+}
+
+function sortWatchlistMovies(movies: Movie[], filters: AdvancedMovieFilters, sortByRating: boolean) {
+  const sort = filters.sort ?? (sortByRating ? 'imdbRating' : 'year')
+  const direction = filters.sort ? filters.order ?? 'desc' : 'desc'
+  return [...movies].sort((first, second) => {
+    const firstValue = sort === 'title' ? first.title.toLocaleLowerCase()
+      : sort === 'runtime' ? first.runtime
+        : sort === 'metacritic' ? first.metacritic ?? -1
+          : sort === 'released' ? Date.parse(first.released) || first.year
+            : sort === 'imdbRating' ? first.rating
+              : first.year
+    const secondValue = sort === 'title' ? second.title.toLocaleLowerCase()
+      : sort === 'runtime' ? second.runtime
+        : sort === 'metacritic' ? second.metacritic ?? -1
+          : sort === 'released' ? Date.parse(second.released) || second.year
+            : sort === 'imdbRating' ? second.rating
+              : second.year
+    const comparison = typeof firstValue === 'string' && typeof secondValue === 'string'
+      ? firstValue.localeCompare(secondValue)
+      : Number(firstValue) - Number(secondValue)
+    return direction === 'asc' ? comparison : -comparison
+  })
+}
+
 function DiscoverPage() {
   const [movies, setMovies] = useState<Movie[]>([])
   const [pagination, setPagination] = useState(emptyPagination)
@@ -55,7 +123,8 @@ function DiscoverPage() {
   const [advancedSearchDraft, setAdvancedSearchDraft] = useState<AdvancedSearchDraft>(emptyAdvancedSearch)
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedMovieFilters>({})
   const [advancedSearchError, setAdvancedSearchError] = useState('')
-  const { search, genres, genresError, activeGenres, setActiveGenres, sortByRating, setSortByRating, showWatchlist, setShowWatchlist, savedMovies, toggleSaved } = useAppShell()
+  const { search, genres, genresError, activeGenres, setActiveGenres, sortByRating, setSortByRating, showWatchlist, savedMovies, toggleSaved } = useAppShell()
+  const watchlistMovieCache = useRef(new Map<string, Movie>())
   const advancedFiltersKey = JSON.stringify(advancedFilters)
   const activeGenresKey = JSON.stringify(activeGenres)
   const previousFilters = useRef({ search: debouncedSearch, activeGenresKey, sortByRating, showWatchlist, advancedFiltersKey })
@@ -86,20 +155,30 @@ function DiscoverPage() {
     setLoadError('')
     setMovies([])
     const watchlistIds = savedMoviesKey ? savedMoviesKey.split('\u001f') : []
-    const watchlistPages = Math.ceil(watchlistIds.length / moviesPerPage)
-    const watchlistPage = Math.min(page, Math.max(watchlistPages, 1))
     const loadResults = showWatchlist
-      ? Promise.all(watchlistIds.slice((watchlistPage - 1) * moviesPerPage, watchlistPage * moviesPerPage).map((movieId) => getMovie(movieId))).then((results) => ({
-        movies: results,
-        pagination: {
-          page: watchlistPage,
-          limit: moviesPerPage,
-          total: watchlistIds.length,
-          pages: watchlistPages,
-          hasNextPage: watchlistPage < watchlistPages,
-          hasPrevPage: watchlistPage > 1,
-        },
-      }))
+      ? Promise.all(watchlistIds.filter((movieId) => !watchlistMovieCache.current.has(movieId)).map(async (movieId) => {
+        watchlistMovieCache.current.set(movieId, await getMovie(movieId))
+      })).then(() => {
+        const results = watchlistIds.map((movieId) => watchlistMovieCache.current.get(movieId)).filter((movie): movie is Movie => movie !== undefined)
+        const filtered = sortWatchlistMovies(filterWatchlistMovies(results, {
+          search: debouncedSearch,
+          genres: activeGenres,
+          filters: advancedFilters,
+        }), advancedFilters, sortByRating)
+        const pages = Math.ceil(filtered.length / moviesPerPage)
+        const watchlistPage = Math.min(page, Math.max(pages, 1))
+        return {
+          movies: filtered.slice((watchlistPage - 1) * moviesPerPage, watchlistPage * moviesPerPage),
+          pagination: {
+            page: watchlistPage,
+            limit: moviesPerPage,
+            total: filtered.length,
+            pages,
+            hasNextPage: watchlistPage < pages,
+            hasPrevPage: watchlistPage > 1,
+          },
+        }
+      })
       : getMovies({ page, genres: activeGenres, search: debouncedSearch, sortByRating, ...advancedFilters })
 
     loadResults.then((result) => {
@@ -127,9 +206,7 @@ function DiscoverPage() {
     return () => { active = false }
   }, [selectedMovie])
 
-  const filteredMovies = showWatchlist
-    ? [...movies].sort((first, second) => sortByRating ? second.rating - first.rating : second.year - first.year)
-    : movies
+  const filteredMovies = movies
   const featuredMovie = movies[0]
 
   function openMovie(movie: Movie) {
@@ -175,7 +252,6 @@ function DiscoverPage() {
 
     setAdvancedSearchError('')
     setAdvancedFilters(filters)
-    setShowWatchlist(false)
     setPage(1)
   }
 
@@ -183,7 +259,6 @@ function DiscoverPage() {
     setAdvancedSearchDraft(emptyAdvancedSearch)
     setAdvancedSearchError('')
     setAdvancedFilters({})
-    setShowWatchlist(false)
     setPage(1)
   }
 
@@ -215,7 +290,6 @@ function DiscoverPage() {
             return <button aria-pressed={selected} className={`genre-pill${selected ? ' is-active' : ''}`} key={genre} onClick={() => {
               if (genre === 'All films') setActiveGenres([])
               else setActiveGenres((current) => current.includes(genre) ? current.filter((selectedGenre) => selectedGenre !== genre) : [...current, genre])
-              setShowWatchlist(false)
             }} type="button">{genre}</button>
           })}</div>
           <div className="advanced-search-tools">
@@ -278,7 +352,7 @@ function DiscoverPage() {
             <button className="page-button" disabled={!pagination.hasPrevPage || isLoading} onClick={() => setPage(pagination.page - 1)} type="button">Previous</button>
             <span>Page {pagination.page} of {pagination.pages}</span>
             <button className="page-button" disabled={!pagination.hasNextPage || isLoading} onClick={() => setPage(pagination.page + 1)} type="button">Next</button>
-          </nav>}</> : <div className="empty-state"><Search size={22} /><strong>{isLoading ? 'Loading films' : loadError ? 'Could not load films' : showWatchlist ? 'Your watchlist is empty' : 'No films found'}</strong><span>{isLoading ? 'Connecting to your collection...' : loadError ? loadError : 'Try another title or clear the genre filter.'}</span>{loadError && <button className="sort-button" onClick={() => { setIsLoading(true); setReloadKey((key) => key + 1) }} type="button">Try again</button>}</div>}
+          </nav>}</> : <div className="empty-state"><Search size={22} /><strong>{isLoading ? 'Loading films' : loadError ? 'Could not load films' : showWatchlist ? savedMovies.length ? 'No watchlist films match' : 'Your watchlist is empty' : 'No films found'}</strong><span>{isLoading ? 'Connecting to your collection...' : loadError ? loadError : showWatchlist ? 'Try changing or clearing your filters.' : 'Try another title or clear the genre filter.'}</span>{loadError && <button className="sort-button" onClick={() => { setIsLoading(true); setReloadKey((key) => key + 1) }} type="button">Try again</button>}</div>}
         </section>
         <footer className="page-footer"><span>MOSAIC <i /> FILM, FOUND.</span><span>MADE FOR THE LOVE OF A GOOD STORY</span></footer>
     {selectedMovie && <div className="dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setSelectedMovie(null)}>

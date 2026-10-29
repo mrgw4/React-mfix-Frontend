@@ -57,6 +57,10 @@ describe('auth API unit tests', () => {
           plot: 'A story.',
           director: 'A Director',
           cast: ['An Actor'],
+          rated: '',
+          type: '',
+          metacritic: null,
+          released: '',
           posterUrl: 'poster.jpg',
         }],
         pagination: {

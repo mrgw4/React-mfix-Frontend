@@ -8,6 +8,10 @@ export type Movie = {
   plot: string
   director: string
   cast: string[]
+  rated: string
+  type: string
+  metacritic: number | null
+  released: string
   posterUrl: string
 }
 
@@ -121,6 +125,7 @@ function asStringArray(value: unknown): string[] {
 function normalizeMovie(value: unknown, index: number): Movie {
   const movie = asRecord(value)
   const imdb = asRecord(movie.imdb)
+  const metacritic = Number(movie.metacritic)
   return {
     id: asString(movie._id ?? movie.id, `movie-${index}`),
     title: asString(movie.title, 'Untitled film'),
@@ -131,6 +136,10 @@ function normalizeMovie(value: unknown, index: number): Movie {
     plot: asString(movie.fullplot ?? movie.plot ?? movie.overview),
     director: asString(movie.director ?? asStringArray(movie.directors)[0]),
     cast: asStringArray(movie.cast ?? movie.actors),
+    rated: asString(movie.rated),
+    type: asString(movie.type),
+    metacritic: Number.isFinite(metacritic) && movie.metacritic !== null && movie.metacritic !== undefined ? metacritic : null,
+    released: asString(movie.released),
     posterUrl: asString(movie.posterUrl ?? movie.poster_url ?? movie.poster ?? movie.image),
   }
 }

@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
@@ -236,7 +236,7 @@ describe('movie discovery integration', () => {
     expect(screen.getByRole('button', { name: 'The Quiet Between' })).toBeVisible()
   })
 
-  it('paginates the watchlist and fetches only the saved movies on the current page', async () => {
+  it('paginates the watchlist after loading saved movies for filtering and sorting', async () => {
     const savedMovieIds = Array.from({ length: 31 }, (_, index) => `watchlist-${index}`)
     window.localStorage.setItem('mosaic.watchlist.v1', JSON.stringify(savedMovieIds))
     const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
@@ -256,16 +256,74 @@ describe('movie discovery integration', () => {
     expect(await screen.findByRole('button', { name: 'Film watchlist-0' })).toBeVisible()
     expect(screen.getByText('Page 1 of 2')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Film watchlist-30' })).not.toBeInTheDocument()
-    expect(fetchMock.mock.calls.some(([input]) => new URL(String(input)).pathname.endsWith('/watchlist-30'))).toBe(false)
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/movies\/watchlist-30$/),
+      expect.objectContaining({}),
+    )
 
     await user.click(screen.getByRole('button', { name: 'Next' }))
 
     expect(await screen.findByRole('button', { name: 'Film watchlist-30' })).toBeVisible()
     expect(screen.getByText('Page 2 of 2')).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/\/api\/movies\/watchlist-30$/),
-      expect.objectContaining({}),
-    )
+  })
+
+  it('keeps watchlist mode active and applies genre, search, and advanced filters to saved movies', async () => {
+    const savedMovies = [
+      { ...movieResponse.data[0], _id: 'quiet', title: 'The Quiet Between', year: 2025, genres: ['Drama'], imdb: { rating: 7.2 }, metacritic: 70 },
+      { ...movieResponse.data[0], _id: 'distant', title: 'A Distant Voice', year: 2000, genres: ['Drama', 'Documentary'], imdb: { rating: 8.8 }, metacritic: 90, runtime: 120, fullplot: 'A story from the backend.', directors: ['Mara Ellison'], cast: ['Nina Park'], rated: 'PG-13', type: 'movie' },
+    ]
+    window.localStorage.setItem('mosaic.watchlist.v1', JSON.stringify(['quiet', 'distant']))
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      const movieId = url.pathname.split('/').pop()
+      return {
+        ok: true,
+        json: async () => url.pathname.endsWith('/genres') ? genresResponse
+          : url.pathname === '/api/movies' ? movieResponse
+            : savedMovies.find((movie) => movie._id === movieId),
+      }
+    }))
+    const user = userEvent.setup()
+
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: /Watchlist/ }))
+    expect(await screen.findByRole('button', { name: 'The Quiet Between' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'A Distant Voice' })).toBeVisible()
+
+    await user.click(screen.getAllByRole('button', { name: 'Documentary' })[0])
+    expect(await screen.findByRole('button', { name: 'A Distant Voice' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'The Quiet Between' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Your watchlist' })).toBeInTheDocument()
+
+    await user.click(screen.getAllByRole('button', { name: 'All films' })[0])
+    await user.type(screen.getByRole('searchbox', { name: 'Search movies' }), 'Quiet')
+    expect(await screen.findByRole('button', { name: 'The Quiet Between' })).toBeVisible()
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'A Distant Voice' })).not.toBeInTheDocument())
+
+    await user.clear(screen.getByRole('searchbox', { name: 'Search movies' }))
+    await user.click(screen.getByRole('button', { name: 'Advanced search' }))
+    await user.type(screen.getByLabelText('Title'), 'Distant')
+    await user.type(screen.getByLabelText('Plot'), 'story from the backend')
+    await user.type(screen.getByLabelText('Director'), 'Mara Ellison')
+    await user.type(screen.getByLabelText('Cast member'), 'Nina Park')
+    await user.type(screen.getByLabelText('Content rating'), 'PG-13')
+    await user.type(screen.getByLabelText('Movie type'), 'movie')
+    await user.type(screen.getByLabelText('Release year from'), '1990')
+    await user.type(screen.getByLabelText('Minimum runtime'), '100')
+    await user.type(screen.getByLabelText('Minimum IMDb rating'), '8')
+    await user.type(screen.getByLabelText('Minimum Metacritic score'), '80')
+    await user.click(screen.getByRole('button', { name: 'Apply filters' }))
+
+    expect(await screen.findByRole('button', { name: 'A Distant Voice' })).toBeVisible()
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'The Quiet Between' })).not.toBeInTheDocument())
+    expect(screen.getByRole('heading', { name: 'Your watchlist' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Sort films' }), 'rating')
+    await waitFor(() => {
+      expect(Array.from(document.querySelectorAll('.movie-title')).map((element) => element.textContent))
+        .toEqual(['A Distant Voice', 'The Quiet Between'])
+    })
   })
 
   it('returns to discover when its sidebar link is clicked from the watchlist', async () => {

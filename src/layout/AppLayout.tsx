@@ -61,8 +61,8 @@ function AppSidebar({ genres, savedMovies, showWatchlist, setShowWatchlist, setS
     <section className="genre-picker" aria-label="Genre browser">
       <label className="genre-search"><Search size={14} /><input aria-label="Search genres" onChange={(event) => setGenreSearch(event.target.value)} placeholder="Search genres" type="search" value={genreSearch} /></label>
       <nav className="genre-nav" aria-label="Browse by genre">
-        <button aria-pressed={activeGenres.length === 0} className={`genre-link${activeGenres.length === 0 ? ' selected' : ''}`} onClick={() => { setActiveGenres([]); setShowWatchlist(false) }} type="button"><span className="genre-dot" />All films</button>
-        {visibleGenres.map((genre) => <button aria-pressed={activeGenres.includes(genre)} className={`genre-link${activeGenres.includes(genre) ? ' selected' : ''}`} key={genre} onClick={() => { setActiveGenres((current) => current.includes(genre) ? current.filter((selectedGenre) => selectedGenre !== genre) : [...current, genre]); setShowWatchlist(false) }} type="button"><span className={`genre-dot dot-${genre.toLowerCase()}`} />{genre}</button>)}
+        <button aria-pressed={activeGenres.length === 0} className={`genre-link${activeGenres.length === 0 ? ' selected' : ''}`} onClick={() => setActiveGenres([])} type="button"><span className="genre-dot" />All films</button>
+        {visibleGenres.map((genre) => <button aria-pressed={activeGenres.includes(genre)} className={`genre-link${activeGenres.includes(genre) ? ' selected' : ''}`} key={genre} onClick={() => setActiveGenres((current) => current.includes(genre) ? current.filter((selectedGenre) => selectedGenre !== genre) : [...current, genre])} type="button"><span className={`genre-dot dot-${genre.toLowerCase()}`} />{genre}</button>)}
         {visibleGenres.length === 0 && <span className="genre-no-results">No matching genres</span>}
       </nav>
     </section>
