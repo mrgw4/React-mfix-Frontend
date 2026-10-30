@@ -6,7 +6,9 @@ export type Movie = {
   rating: number
   runtime: number
   plot: string
+  plotForFiltering: string
   director: string
+  directors: string[]
   cast: string[]
   rated: string
   type: string
@@ -68,6 +70,8 @@ export type AdvancedMovieFilters = Pick<MovieQuery,
   | 'sort'
   | 'order'
 >
+export type MovieSort = NonNullable<MovieQuery['sort']>
+export type MovieSortOrder = NonNullable<MovieQuery['order']>
 
 export type MovieComment = { id: string; name: string; text: string; date: string }
 type CommentInput = { movieId: string; name: string; text: string }
@@ -126,6 +130,7 @@ function normalizeMovie(value: unknown, index: number): Movie {
   const movie = asRecord(value)
   const imdb = asRecord(movie.imdb)
   const metacritic = Number(movie.metacritic)
+  const directors = asStringArray(movie.directors ?? movie.director)
   return {
     id: asString(movie._id ?? movie.id, `movie-${index}`),
     title: asString(movie.title, 'Untitled film'),
@@ -134,7 +139,9 @@ function normalizeMovie(value: unknown, index: number): Movie {
     rating: Number(imdb.rating ?? movie.rating ?? movie.vote_average) || 0,
     runtime: Number(movie.runtime) || 0,
     plot: asString(movie.fullplot ?? movie.plot ?? movie.overview),
-    director: asString(movie.director ?? asStringArray(movie.directors)[0]),
+    plotForFiltering: asString(movie.plot),
+    director: asString(movie.director ?? directors[0]),
+    directors,
     cast: asStringArray(movie.cast ?? movie.actors),
     rated: asString(movie.rated),
     type: asString(movie.type),

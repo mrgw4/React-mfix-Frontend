@@ -116,19 +116,20 @@ describe('movie discovery integration', () => {
     render(<App />)
 
     const sortSelect = await screen.findByRole('combobox', { name: 'Sort films' })
-    expect(sortSelect).toHaveValue('recent')
+    expect(sortSelect).toHaveValue('year')
 
-    await user.selectOptions(sortSelect, 'rating')
+    await user.selectOptions(sortSelect, 'imdbRating')
 
-    expect(sortSelect).toHaveValue('rating')
+    expect(sortSelect).toHaveValue('imdbRating')
+    expect(screen.getByRole('heading', { name: 'A little of everything' })).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledWith(
       expect.stringMatching(/[?&]sort=imdbRating/),
       expect.objectContaining({}),
     )
 
-    await user.selectOptions(sortSelect, 'recent')
+    await user.selectOptions(sortSelect, 'year')
 
-    expect(sortSelect).toHaveValue('recent')
+    expect(sortSelect).toHaveValue('year')
     expect(fetch).toHaveBeenCalledWith(
       expect.stringMatching(/[?&]sort=year/),
       expect.objectContaining({}),
@@ -148,14 +149,15 @@ describe('movie discovery integration', () => {
 
     render(<App />)
     expect(await screen.findByRole('button', { name: 'The Quiet Between' })).toBeVisible()
-    await user.click(screen.getByRole('button', { name: 'Advanced search' }))
     const catalogControls = within(screen.getByRole('group', { name: 'Catalog search and sort' }))
-    expect(catalogControls.getByRole('combobox', { name: 'Sort films' })).toBeInTheDocument()
+    const sortSelect = catalogControls.getByRole('combobox', { name: 'Sort films' })
+    const sortOrderSelect = catalogControls.getByRole('combobox', { name: 'Sort direction' })
+    await user.click(screen.getByRole('button', { name: 'Advanced search' }))
     await user.type(screen.getByLabelText('Title'), 'Quiet')
     await user.type(screen.getByLabelText('Release year from'), '2020')
     await user.type(screen.getByLabelText('Minimum IMDb rating'), '8')
-    await user.selectOptions(screen.getByLabelText('Sort results by'), 'imdbRating')
-    await user.selectOptions(screen.getByLabelText('Sort direction'), 'asc')
+    await user.selectOptions(sortSelect, 'imdbRating')
+    await user.selectOptions(sortOrderSelect, 'asc')
     await user.click(screen.getByRole('button', { name: 'Apply filters' }))
 
     const advancedRequest = fetchMock.mock.calls
@@ -167,6 +169,18 @@ describe('movie discovery integration', () => {
     expect(advancedRequest?.searchParams.get('sort')).toBe('imdbRating')
     expect(advancedRequest?.searchParams.get('order')).toBe('asc')
     expect(screen.getByText('Advanced filters applied')).toBeInTheDocument()
+    expect(sortSelect).toHaveValue('imdbRating')
+    expect(sortOrderSelect).toHaveValue('asc')
+
+    await user.selectOptions(sortSelect, 'year')
+    await waitFor(() => {
+      const sortedRequest = fetchMock.mock.calls
+        .map(([input]) => new URL(String(input)))
+        .find((url) => url.pathname === '/api/movies' && url.searchParams.has('title')
+          && url.searchParams.get('sort') === 'year')
+      expect(sortedRequest?.searchParams.get('order')).toBe('asc')
+    })
+    expect(sortSelect).toHaveValue('year')
   })
 
   it('prevents advanced searches with an inverted year range', async () => {
@@ -272,7 +286,7 @@ describe('movie discovery integration', () => {
   it('keeps watchlist mode active and applies genre, search, and advanced filters to saved movies', async () => {
     const savedMovies = [
       { ...movieResponse.data[0], _id: 'quiet', title: 'The Quiet Between', year: 2025, genres: ['Drama'], imdb: { rating: 7.2 }, metacritic: 70 },
-      { ...movieResponse.data[0], _id: 'distant', title: 'A Distant Voice', year: 2000, genres: ['Drama', 'Documentary'], imdb: { rating: 8.8 }, metacritic: 90, runtime: 120, fullplot: 'A story from the backend.', directors: ['Mara Ellison'], cast: ['Nina Park'], rated: 'PG-13', type: 'movie' },
+      { ...movieResponse.data[0], _id: 'distant', title: 'A Distant Voice', year: 2000, genres: ['Drama', 'Documentary'], imdb: { rating: 8.8 }, metacritic: 90, runtime: 120, plot: 'A story from the backend.', fullplot: 'A story from the backend.', directors: ['Mara Ellison'], cast: ['Nina Park'], rated: 'PG-13', type: 'movie' },
     ]
     window.localStorage.setItem('mosaic.watchlist.v1', JSON.stringify(['quiet', 'distant']))
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: string | URL | Request) => {
@@ -298,6 +312,10 @@ describe('movie discovery integration', () => {
     expect(screen.getByRole('heading', { name: 'Your watchlist' })).toBeInTheDocument()
 
     await user.click(screen.getAllByRole('button', { name: 'All films' })[0])
+    await user.type(screen.getByRole('searchbox', { name: 'Search movies' }), 'Nina Park')
+    expect(await screen.findByText('No watchlist films match')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'A Distant Voice' })).not.toBeInTheDocument()
+    await user.clear(screen.getByRole('searchbox', { name: 'Search movies' }))
     await user.type(screen.getByRole('searchbox', { name: 'Search movies' }), 'Quiet')
     expect(await screen.findByRole('button', { name: 'The Quiet Between' })).toBeVisible()
     await waitFor(() => expect(screen.queryByRole('button', { name: 'A Distant Voice' })).not.toBeInTheDocument())
@@ -321,7 +339,7 @@ describe('movie discovery integration', () => {
     expect(screen.getByRole('heading', { name: 'Your watchlist' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Clear filters' }))
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Sort films' }), 'rating')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Sort films' }), 'imdbRating')
     await waitFor(() => {
       expect(Array.from(document.querySelectorAll('.movie-title')).map((element) => element.textContent))
         .toEqual(['A Distant Voice', 'The Quiet Between'])

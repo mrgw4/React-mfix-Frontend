@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
+  ArrowDownUp,
   Bookmark,
   Check,
   Film,
@@ -22,6 +23,8 @@ import {
   type Movie,
   type MovieComment,
   type MoviePage,
+  type MovieSort,
+  type MovieSortOrder,
 } from '../api'
 import { useAppShell } from '../layout/AppShellContext'
 
@@ -36,9 +39,6 @@ const emptyPagination: MoviePage['pagination'] = {
 const moviesPerPage = 30
 type AdvancedSearchDraft = {
   [Field in Exclude<keyof AdvancedMovieFilters, 'sort' | 'order'>]: string
-} & {
-  sort: '' | NonNullable<AdvancedMovieFilters['sort']>
-  order: NonNullable<AdvancedMovieFilters['order']>
 }
 const emptyAdvancedSearch: AdvancedSearchDraft = {
   title: '',
@@ -55,9 +55,16 @@ const emptyAdvancedSearch: AdvancedSearchDraft = {
   imdbRatingMax: '',
   metacriticMin: '',
   metacriticMax: '',
-  sort: '',
-  order: 'desc',
 }
+
+const movieSortOptions: { value: MovieSort; label: string }[] = [
+  { value: 'year', label: 'Newest year' },
+  { value: 'imdbRating', label: 'Top rated' },
+  { value: 'title', label: 'Title' },
+  { value: 'runtime', label: 'Runtime' },
+  { value: 'released', label: 'Release date' },
+  { value: 'metacritic', label: 'Metacritic score' },
+]
 
 type WatchlistFilterOptions = {
   search: string
@@ -74,24 +81,18 @@ function filterWatchlistMovies(movies: Movie[], options: WatchlistFilterOptions)
   return movies.filter((movie) => {
     const searchableFields = [
       movie.title,
-      movie.plot,
-      movie.director,
-      ...movie.cast,
+      ...movie.directors,
       ...movie.genres,
-      String(movie.year),
     ]
     if (search && !searchableFields.some((value) => matchesText(value, search))) return false
     if (!options.genres.every((genre) => movie.genres.includes(genre))) return false
 
-    const textFilters = [
-      [movie.title, options.filters.title],
-      [movie.plot, options.filters.plot],
-      [movie.director, options.filters.directors],
-      [movie.cast.join(' '), options.filters.cast],
-      [movie.rated, options.filters.rated],
-      [movie.type, options.filters.type],
-    ] as const
-    if (textFilters.some(([value, filter]) => filter && !matchesText(value, filter))) return false
+    if (options.filters.title && !matchesText(movie.title, options.filters.title)) return false
+    if (options.filters.plot && !matchesText(movie.plotForFiltering, options.filters.plot)) return false
+    if (options.filters.directors && !movie.directors.includes(options.filters.directors)) return false
+    if (options.filters.cast && !movie.cast.includes(options.filters.cast)) return false
+    if (options.filters.rated && movie.rated !== options.filters.rated) return false
+    if (options.filters.type && movie.type !== options.filters.type) return false
 
     const rangeFilters = [
       [movie.year, options.filters.yearMin, options.filters.yearMax],
@@ -101,7 +102,7 @@ function filterWatchlistMovies(movies: Movie[], options: WatchlistFilterOptions)
     ] as const
     return rangeFilters.every(([value, minimum, maximum]) => {
       if (minimum === undefined && maximum === undefined) return true
-      if (value === null || value <= 0) return false
+      if (value === null) return false
       return (minimum === undefined || value >= minimum) && (maximum === undefined || value <= maximum)
     })
   })
@@ -306,14 +307,30 @@ function DiscoverPage() {
       ? `linear-gradient(90deg, rgba(18, 33, 29, .98) 0%, rgba(18, 33, 29, .88) 39%, rgba(18, 33, 29, .08) 100%), url("${featuredMovie.posterUrl || ''}")`
       : undefined,
   }), [featuredMovie])
+  const hasAdvancedFilters = Object.keys(advancedFilters).some((key) => key !== 'sort' && key !== 'order')
   const catalogTitle = showWatchlist
     ? 'Your watchlist'
-    : search || Object.keys(advancedFilters).length
+    : search || hasAdvancedFilters
       ? 'Search results'
       : activeGenres.length === 0
         ? 'A little of everything'
         : `${activeGenres.join(' + ')}, for you`
-  const hasAdvancedFilters = Object.keys(advancedFilters).length > 0
+  const selectedSort = advancedFilters.sort ?? (sortByRating ? 'imdbRating' : 'year')
+  const selectedSortOrder = advancedFilters.order ?? 'desc'
+
+  function updateMovieSort(value: string) {
+    const option = movieSortOptions.find((sortOption) => sortOption.value === value)
+    if (!option) return
+    const sort: MovieSort = option.value
+    setSortByRating(sort === 'imdbRating')
+    setAdvancedFilters((current) => ({ ...current, sort }))
+  }
+
+  function updateSortOrder(value: string) {
+    if (value !== 'asc' && value !== 'desc') return
+    const order: MovieSortOrder = value
+    setAdvancedFilters((current) => ({ ...current, order }))
+  }
 
   function openMovie(movie: Movie) {
     setComments([])
@@ -342,7 +359,10 @@ function DiscoverPage() {
       }
     }
 
-    const filters: AdvancedMovieFilters = {}
+    const filters: AdvancedMovieFilters = {
+      sort: advancedFilters.sort ?? (sortByRating ? 'imdbRating' : 'year'),
+      order: advancedFilters.order ?? 'desc',
+    }
     for (const field of ['title', 'plot', 'directors', 'cast', 'rated', 'type'] as const) {
       const value = advancedSearchDraft[field].trim()
       if (value) filters[field] = value
@@ -351,11 +371,6 @@ function DiscoverPage() {
       const value = advancedSearchDraft[field]
       if (value) filters[field] = Number(value)
     }
-    if (advancedSearchDraft.sort) {
-      filters.sort = advancedSearchDraft.sort
-      filters.order = advancedSearchDraft.order
-    }
-
     setAdvancedSearchError('')
     setAdvancedFilters(filters)
     setPage(1)
@@ -364,7 +379,10 @@ function DiscoverPage() {
   function clearAdvancedSearch() {
     setAdvancedSearchDraft(emptyAdvancedSearch)
     setAdvancedSearchError('')
-    setAdvancedFilters({})
+    setAdvancedFilters((current) => ({
+      sort: current.sort,
+      order: current.order,
+    }))
     setPage(1)
   }
 
@@ -476,16 +494,28 @@ function DiscoverPage() {
               <SlidersHorizontal aria-hidden="true" size={14} />
               Advanced search
             </button>
-            <label className={`sort-control${sortByRating ? ' is-active' : ''}`}>
-              <SlidersHorizontal aria-hidden="true" size={15} />
+            <label className="sort-control">
+              <ArrowDownUp aria-hidden="true" size={15} />
               <select
                 aria-label="Sort films"
                 className="sort-select"
-                onChange={(event) => setSortByRating(event.target.value === 'rating')}
-                value={sortByRating ? 'rating' : 'recent'}
+                onChange={(event) => updateMovieSort(event.target.value)}
+                value={selectedSort}
               >
-                <option value="recent">Recently added</option>
-                <option value="rating">Top rated</option>
+                {movieSortOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="sort-control">
+              <select
+                aria-label="Sort direction"
+                className="sort-select"
+                onChange={(event) => updateSortOrder(event.target.value)}
+                value={selectedSortOrder}
+              >
+                <option value="desc">Highest / newest first</option>
+                <option value="asc">Lowest / oldest first</option>
               </select>
             </label>
           </div>
@@ -711,31 +741,6 @@ function DiscoverPage() {
               </label>
             </fieldset>
 
-            <label className="advanced-search-field">
-              Sort results by
-              <select
-                onChange={(event) => updateAdvancedSearchField('sort', event.target.value)}
-                value={advancedSearchDraft.sort}
-              >
-                <option value="">Use catalog sort</option>
-                <option value="title">Title</option>
-                <option value="year">Release year</option>
-                <option value="runtime">Runtime</option>
-                <option value="released">Release date</option>
-                <option value="metacritic">Metacritic score</option>
-                <option value="imdbRating">IMDb rating</option>
-              </select>
-            </label>
-            <label className="advanced-search-field">
-              Sort direction
-              <select
-                onChange={(event) => updateAdvancedSearchField('order', event.target.value)}
-                value={advancedSearchDraft.order}
-              >
-                <option value="desc">Highest / newest first</option>
-                <option value="asc">Lowest / oldest first</option>
-              </select>
-            </label>
           </div>
 
           {advancedSearchError && (
