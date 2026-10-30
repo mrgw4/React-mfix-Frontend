@@ -220,6 +220,7 @@ export default function AppLayout() {
   const [genres, setGenres] = useState<string[]>([])
   const [genresError, setGenresError] = useState('')
   const [activeGenres, setActiveGenres] = useState<string[]>([])
+  const [sortByRating, setSortByRating] = useState(true)
   const [showWatchlist, setShowWatchlist] = useState(false)
   const [authSession, setAuthSession] = useState<AuthSession | null>(getSavedAuthSession)
   const [savedMovies, setSavedMovies] = useState<string[]>(() => getSavedMovieIds(authSession?.user.id ?? null))
@@ -263,6 +264,8 @@ export default function AppLayout() {
     genresError,
     activeGenres,
     setActiveGenres,
+    sortByRating,
+    setSortByRating,
     showWatchlist,
     setShowWatchlist,
     savedMovies,
