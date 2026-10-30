@@ -7,8 +7,6 @@ export type AppShellContextValue = {
   genresError: string
   activeGenres: string[]
   setActiveGenres: Dispatch<SetStateAction<string[]>>
-  sortByRating: boolean
-  setSortByRating: Dispatch<SetStateAction<boolean>>
   showWatchlist: boolean
   setShowWatchlist: Dispatch<SetStateAction<boolean>>
   savedMovies: string[]

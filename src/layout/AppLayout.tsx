@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Bookmark, Clapperboard, Film, LogIn, Search, Sparkles, Star } from 'lucide-react'
+import { Bookmark, Clapperboard, Film, LogIn, Search, Sparkles } from 'lucide-react'
 import { getGenres, login, logout, register, type AuthSession } from '../api'
 import { AppShellContext, type AppShellContextValue } from './AppShellContext'
 import '../App.css'
@@ -48,9 +48,9 @@ function getSavedAuthSession(): AuthSession | null {
   }
 }
 
-type AppSidebarProps = Pick<AppShellContextValue, 'genres' | 'savedMovies' | 'showWatchlist' | 'setShowWatchlist' | 'setSortByRating' | 'activeGenres' | 'setActiveGenres'> & { authSession: AuthSession | null }
+type AppSidebarProps = Pick<AppShellContextValue, 'genres' | 'savedMovies' | 'showWatchlist' | 'setShowWatchlist' | 'activeGenres' | 'setActiveGenres'> & { authSession: AuthSession | null }
 
-function AppSidebar({ genres, savedMovies, showWatchlist, setShowWatchlist, setSortByRating, activeGenres, setActiveGenres, authSession }: AppSidebarProps) {
+function AppSidebar({ genres, savedMovies, showWatchlist, setShowWatchlist, activeGenres, setActiveGenres, authSession }: AppSidebarProps) {
   const [genreSearch, setGenreSearch] = useState('')
   const visibleGenres = genres.filter((genre) => genre.toLowerCase().includes(genreSearch.trim().toLowerCase()))
 
@@ -59,7 +59,6 @@ function AppSidebar({ genres, savedMovies, showWatchlist, setShowWatchlist, setS
     <div className="side-label">YOUR SPACE</div>
     <nav className="side-nav" aria-label="Main navigation">
       <NavLink className={({ isActive }) => `nav-link${isActive && !showWatchlist ? ' active' : ''}`} onClick={() => setShowWatchlist(false)} to="/"><Sparkles size={17} /> Discover</NavLink>
-      <button className="nav-link" onClick={() => { setSortByRating(true); setShowWatchlist(false) }} type="button"><Star size={17} /> Top rated</button>
       <button className={`nav-link${showWatchlist ? ' active' : ''}`} onClick={() => setShowWatchlist((current) => !current)} type="button"><Bookmark size={17} /> Watchlist <span className="nav-count">{savedMovies.length}</span></button>
     </nav>
     <div className="side-label genre-label">BROWSE BY MOOD</div>
@@ -221,7 +220,6 @@ export default function AppLayout() {
   const [genres, setGenres] = useState<string[]>([])
   const [genresError, setGenresError] = useState('')
   const [activeGenres, setActiveGenres] = useState<string[]>([])
-  const [sortByRating, setSortByRating] = useState(false)
   const [showWatchlist, setShowWatchlist] = useState(false)
   const [authSession, setAuthSession] = useState<AuthSession | null>(getSavedAuthSession)
   const [savedMovies, setSavedMovies] = useState<string[]>(() => getSavedMovieIds(authSession?.user.id ?? null))
@@ -265,8 +263,6 @@ export default function AppLayout() {
     genresError,
     activeGenres,
     setActiveGenres,
-    sortByRating,
-    setSortByRating,
     showWatchlist,
     setShowWatchlist,
     savedMovies,
@@ -280,7 +276,6 @@ export default function AppLayout() {
         savedMovies={savedMovies}
         showWatchlist={showWatchlist}
         setShowWatchlist={setShowWatchlist}
-        setSortByRating={setSortByRating}
         activeGenres={activeGenres}
         setActiveGenres={setActiveGenres}
         authSession={authSession}
