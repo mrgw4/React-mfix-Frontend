@@ -867,8 +867,16 @@
 
 .catalog-controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 15px;
+}
+
+.catalog-control-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .result-count {
@@ -949,13 +957,6 @@
   flex-wrap: wrap;
   gap: 7px;
   padding: 17px 0 15px;
-}
-
-.advanced-search-tools {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 13px;
 }
 
 .advanced-search-toggle,

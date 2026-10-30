@@ -19,4 +19,16 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    files: ['src/pages/DiscoverPage.tsx', 'src/layout/AppLayout.tsx'],
+    rules: {
+      'max-len': ['error', {
+        code: 120,
+        ignoreRegExpLiterals: true,
+        ignoreStrings: true,
+        ignoreTemplateLiterals: true,
+        ignoreUrls: true,
+      }],
+    },
+  },
 ])

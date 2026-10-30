@@ -149,6 +149,8 @@ describe('movie discovery integration', () => {
     render(<App />)
     expect(await screen.findByRole('button', { name: 'The Quiet Between' })).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'Advanced search' }))
+    const catalogControls = within(screen.getByRole('group', { name: 'Catalog search and sort' }))
+    expect(catalogControls.getByRole('combobox', { name: 'Sort films' })).toBeInTheDocument()
     await user.type(screen.getByLabelText('Title'), 'Quiet')
     await user.type(screen.getByLabelText('Release year from'), '2020')
     await user.type(screen.getByLabelText('Minimum IMDb rating'), '8')
