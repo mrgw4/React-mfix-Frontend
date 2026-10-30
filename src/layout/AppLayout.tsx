@@ -8,9 +8,14 @@ import '../App.css'
 const watchlistStorageKey = 'mosaic.watchlist.v1'
 const authStorageKey = 'mosaic.auth.v1'
 
-function getSavedMovieIds(): string[] {
+function getWatchlistStorageKey(userId: string | null): string {
+  return userId ? `${watchlistStorageKey}.user.${encodeURIComponent(userId)}` : `${watchlistStorageKey}.guest`
+}
+
+function getSavedMovieIds(userId: string | null): string[] {
   try {
-    const stored = window.localStorage.getItem(watchlistStorageKey)
+    const stored = window.localStorage.getItem(getWatchlistStorageKey(userId))
+      ?? (userId === null ? window.localStorage.getItem(watchlistStorageKey) : null)
     if (!stored) return []
     const savedMovieIds: unknown = JSON.parse(stored)
     return Array.isArray(savedMovieIds) ? savedMovieIds.filter((id): id is string => typeof id === 'string') : []
@@ -71,11 +76,11 @@ function AppSidebar({ genres, savedMovies, showWatchlist, setShowWatchlist, setS
   </aside>
 }
 
-function AppTopbar({ search, setSearch, authSession, setAuthSession }: {
+function AppTopbar({ search, setSearch, authSession, onAuthSessionChange }: {
   search: string
   setSearch: Dispatch<SetStateAction<string>>
   authSession: AuthSession | null
-  setAuthSession: Dispatch<SetStateAction<AuthSession | null>>
+  onAuthSessionChange: (session: AuthSession | null) => void
 }) {
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -113,7 +118,7 @@ function AppTopbar({ search, setSearch, authSession, setAuthSession }: {
     setSuccessMessage('')
     try {
       const session = await login(email.trim(), password)
-      setAuthSession(session)
+      onAuthSessionChange(session)
       setPassword('')
       setConfirmPassword('')
       try {
@@ -167,7 +172,7 @@ function AppTopbar({ search, setSearch, authSession, setAuthSession }: {
     } catch (requestError) {
       logoutError = `Signed out here, but the server could not end the session: ${requestError instanceof Error ? requestError.message : 'Request failed.'}`
     } finally {
-      setAuthSession(null)
+      onAuthSessionChange(null)
       try {
         window.localStorage.removeItem(authStorageKey)
       } catch {
@@ -218,8 +223,8 @@ export default function AppLayout() {
   const [activeGenres, setActiveGenres] = useState<string[]>([])
   const [sortByRating, setSortByRating] = useState(false)
   const [showWatchlist, setShowWatchlist] = useState(false)
-  const [savedMovies, setSavedMovies] = useState<string[]>(getSavedMovieIds)
   const [authSession, setAuthSession] = useState<AuthSession | null>(getSavedAuthSession)
+  const [savedMovies, setSavedMovies] = useState<string[]>(() => getSavedMovieIds(authSession?.user.id ?? null))
 
   useEffect(() => {
     let active = true
@@ -238,14 +243,19 @@ export default function AppLayout() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(watchlistStorageKey, JSON.stringify(savedMovies))
+      window.localStorage.setItem(getWatchlistStorageKey(authSession?.user.id ?? null), JSON.stringify(savedMovies))
     } catch {
       return
     }
-  }, [savedMovies])
+  }, [authSession, savedMovies])
 
   function toggleSaved(movieId: string) {
     setSavedMovies((current) => current.includes(movieId) ? current.filter((id) => id !== movieId) : [...current, movieId])
+  }
+
+  function changeAuthSession(session: AuthSession | null) {
+    setSavedMovies(getSavedMovieIds(session?.user.id ?? null))
+    setAuthSession(session)
   }
 
   const shellContext: AppShellContextValue = {
@@ -276,7 +286,7 @@ export default function AppLayout() {
         authSession={authSession}
       />
       <main id="top" className="main-content">
-        <AppTopbar search={search} setSearch={setSearch} authSession={authSession} setAuthSession={setAuthSession} />
+        <AppTopbar search={search} setSearch={setSearch} authSession={authSession} onAuthSessionChange={changeAuthSession} />
         <Outlet />
       </main>
     </div>

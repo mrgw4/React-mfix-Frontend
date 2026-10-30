@@ -122,6 +122,32 @@ describe('account menu integration', () => {
     }))
   })
 
+  it('keeps guest and signed-in watchlists separate when the account changes', async () => {
+    window.localStorage.setItem('mosaic.watchlist.v1', JSON.stringify(['guest-movie']))
+    window.localStorage.setItem('mosaic.watchlist.v1.user.user-1', JSON.stringify(['account-movie-1', 'account-movie-2']))
+    stubBackend({ login: () => jsonResponse(session) })
+    const user = userEvent.setup()
+    render(<App />)
+    const watchlistButton = screen.getByRole('button', { name: /Watchlist/ })
+
+    expect(watchlistButton).toHaveTextContent('1')
+    await user.click(screen.getByRole('button', { name: 'Open login menu' }))
+    await user.type(screen.getByLabelText('Email'), 'jane@example.com')
+    await user.type(screen.getByLabelText('Password'), 'correct-password')
+    await user.click(screen.getByRole('button', { name: 'Log in' }))
+
+    expect(await screen.findByRole('button', { name: 'Account menu for Jane Doe' })).toBeVisible()
+    expect(watchlistButton).toHaveTextContent('2')
+    expect(window.localStorage.getItem('mosaic.watchlist.v1.user.user-1'))
+      .toBe(JSON.stringify(['account-movie-1', 'account-movie-2']))
+
+    await user.click(screen.getByRole('button', { name: 'Log out' }))
+
+    expect(await screen.findByRole('button', { name: 'Open login menu' })).toBeVisible()
+    expect(watchlistButton).toHaveTextContent('1')
+    expect(window.localStorage.getItem('mosaic.watchlist.v1.guest')).toBe(JSON.stringify(['guest-movie']))
+  })
+
   it('does not send registration when the passwords differ', async () => {
     const fetchMock = stubBackend()
     const user = userEvent.setup()
