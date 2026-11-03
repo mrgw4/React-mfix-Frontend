@@ -98,6 +98,46 @@ Feature: Movie discovery and account access
     Then my watchlist should contain "The Quiet Between"
     And my watchlist should not contain "After the Orchard"
 
+  Scenario: Keep guest and multiple user watchlists isolated
+    Given the movie catalog is available
+    And two distinct accounts are available
+    When I visit the movie discovery page
+    And I save "The Quiet Between" to my watchlist
+    And I open the watchlist
+    Then my watchlist should contain "The Quiet Between"
+    When I log in as "jane@example.com" with password "correct-password"
+    Then my watchlist should be empty
+    When I return to movie discovery
+    And I save "After the Orchard" to my watchlist
+    And I open the watchlist
+    Then my watchlist should contain "After the Orchard"
+    And my watchlist should not contain "The Quiet Between"
+    When I open the first account menu
+    And I log out
+    Then my watchlist should contain "The Quiet Between"
+    And my watchlist should not contain "After the Orchard"
+    When I log in as "alex@example.com" with password "correct-password"
+    Then my watchlist should be empty
+    When I return to movie discovery
+    And I save "A Distant Voice" to my watchlist
+    And I open the watchlist
+    Then my watchlist should contain "A Distant Voice"
+    And my watchlist should not contain "The Quiet Between"
+    And my watchlist should not contain "After the Orchard"
+    And the guest and both account watchlists should remain separate
+    When I open the second account menu
+    And I log out
+    And I log in as "jane@example.com" with password "correct-password"
+    And I open the watchlist
+    Then my watchlist should contain "After the Orchard"
+    And my watchlist should not contain "The Quiet Between"
+    And my watchlist should not contain "A Distant Voice"
+    When I log out
+    And I log in as "alex@example.com" with password "correct-password"
+    Then my watchlist should contain "A Distant Voice"
+    And my watchlist should not contain "The Quiet Between"
+    And my watchlist should not contain "After the Orchard"
+
   Scenario: Paginate a long watchlist
     Given the movie catalog is available
     And the guest watchlist is preloaded with 31 movies

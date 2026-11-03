@@ -178,6 +178,27 @@ Given('the account API is available', () => {
   }).as('logoutUser')
 })
 
+Given('two distinct accounts are available', () => {
+  cy.intercept('POST', '/api/users/login', (request) => {
+    const email = (request.body as { email?: string }).email
+    const account = email === 'jane@example.com'
+      ? { id: 'user-1', name: 'Jane Doe', email }
+      : email === 'alex@example.com'
+        ? { id: 'user-2', name: 'Alex Lee', email }
+        : null
+    request.reply(account
+      ? {
+          statusCode: 200,
+          body: { token: `token-${account.id}`, user: account },
+        }
+      : { statusCode: 401, body: { error: 'Invalid credentials.' } })
+  }).as('isolatedLogin')
+  cy.intercept('POST', '/api/users/logout', {
+    statusCode: 200,
+    body: { message: 'Logged out successfully' },
+  }).as('logoutUser')
+})
+
 Given('the login API rejects the credentials with an empty response', () => {
   cy.intercept('POST', '/api/users/login', {
     statusCode: 401,
@@ -279,7 +300,9 @@ When('I sort the watchlist by {string} in {string} order', (sort: string, order:
 })
 
 When('I open the watchlist', () => {
-  cy.get('button').contains('Watchlist').click()
+  cy.get('button.nav-link').contains('Watchlist').then(($button) => {
+    if (!$button.hasClass('active')) cy.wrap($button).click()
+  })
 })
 
 When('I return to movie discovery', () => {
@@ -288,6 +311,14 @@ When('I return to movie discovery', () => {
 
 When('I open the signed-in account menu', () => {
   cy.get('button[aria-label="Account menu for Jane Doe"]').click()
+})
+
+When('I open the first account menu', () => {
+  cy.get('button[aria-label="Account menu for Jane Doe"]').click()
+})
+
+When('I open the second account menu', () => {
+  cy.get('button[aria-label="Account menu for Alex Lee"]').click()
 })
 
 When('I log out', () => {
@@ -345,6 +376,21 @@ When('I log in with the registered credentials', () => {
   cy.wait('@loginUser').then(({ request }) => {
     expect(request.body).to.deep.equal({ email: 'jane@example.com', password: 'correct-password' })
   })
+})
+
+When('I log in as {string} with password {string}', (email: string, password: string) => {
+  cy.get('body').then(($body) => {
+    if (!$body.find('.account-form').length) {
+      cy.get('button[aria-label="Open login menu"]').click()
+    }
+  })
+  cy.get('input[autocomplete="email"]').clear().type(email)
+  cy.get('input[autocomplete="current-password"]').clear().type(password)
+  cy.contains('button.account-action', 'Log in').click()
+  cy.wait('@isolatedLogin').then(({ request }) => {
+    expect(request.body).to.deep.equal({ email, password })
+  })
+  cy.get('button[aria-label^="Account menu for"]').should('be.visible')
 })
 
 When('I log in with invalid credentials', () => {
@@ -435,6 +481,17 @@ Then('my watchlist should contain {string}', (title: string) => {
 
 Then('my watchlist should not contain {string}', (title: string) => {
   cy.contains('.movie-card .movie-title', title).should('not.exist')
+})
+
+Then('the guest and both account watchlists should remain separate', () => {
+  cy.window().then(({ localStorage }) => {
+    expect(JSON.parse(localStorage.getItem('mosaic.watchlist.v1.guest') ?? 'null'))
+      .to.deep.equal(['movie-quiet-between'])
+    expect(JSON.parse(localStorage.getItem('mosaic.watchlist.v1.user.user-1') ?? 'null'))
+      .to.deep.equal(['movie-after-orchard'])
+    expect(JSON.parse(localStorage.getItem('mosaic.watchlist.v1.user.user-2') ?? 'null'))
+      .to.deep.equal(['movie-distant-voice'])
+  })
 })
 
 Then('I should see watchlist page {string}', (page: string) => {

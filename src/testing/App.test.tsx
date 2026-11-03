@@ -707,7 +707,30 @@ describe('movie discovery integration', () => {
     await user.click(screen.getByRole('button', { name: 'View The Quiet Between' }))
     expect((await screen.findByRole('dialog')).querySelector('.detail-hero')).toHaveStyle({
       backgroundImage: expect.stringContaining('poster.png'),
-    })
+    }    )
+  })
+
+  it('shows the neutral poster placeholder when an image fails to load', async () => {
+    const movieWithPoster = { ...movieResponse.data[0], poster: 'https://example.test/missing-poster.png' }
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      return {
+        ok: true,
+        json: async () => url.pathname.endsWith('/genres') ? genresResponse
+          : url.pathname === '/api/movies'
+            ? { ...movieResponse, data: [movieWithPoster] }
+            : movieWithPoster,
+      }
+    }))
+    render(<App />)
+
+    const poster = await screen.findByRole('img', { name: 'The Quiet Between film still' })
+    fireEvent.error(poster)
+
+    expect(screen.queryByRole('img', { name: 'The Quiet Between film still' })).not.toBeInTheDocument()
+    const placeholder = screen.getByRole('img', { name: 'The Quiet Between poster unavailable' })
+    expect(placeholder).toBeVisible()
+    expect(within(placeholder).getByText('The Quiet Between')).toBeVisible()
   })
 
   it('shows a comment posting error and handles missing detail fields', async () => {

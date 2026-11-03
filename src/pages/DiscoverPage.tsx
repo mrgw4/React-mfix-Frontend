@@ -163,6 +163,7 @@ function DiscoverPage() {
   const [advancedSearchDraft, setAdvancedSearchDraft] = useState<AdvancedSearchDraft>(emptyAdvancedSearch)
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedMovieFilters>({})
   const [advancedSearchError, setAdvancedSearchError] = useState('')
+  const [failedPosterUrls, setFailedPosterUrls] = useState<Set<string>>(() => new Set())
   const {
     search,
     genres,
@@ -771,15 +772,25 @@ function DiscoverPage() {
                     onClick={() => openMovie(movie)}
                     type="button"
                   >
-                    {movie.posterUrl ? (
+                    {movie.posterUrl && !failedPosterUrls.has(movie.posterUrl) ? (
                       <img
                         alt={`${movie.title} film still`}
                         className="poster-image"
                         loading="lazy"
+                        onError={(event) => {
+                          const posterUrl = event.currentTarget.getAttribute('src')
+                          if (posterUrl) {
+                            setFailedPosterUrls((failedUrls) => new Set(failedUrls).add(posterUrl))
+                          }
+                        }}
                         src={movie.posterUrl}
                       />
                     ) : (
-                      <div className="poster-placeholder">
+                      <div
+                        aria-label={`${movie.title} poster unavailable`}
+                        className="poster-placeholder"
+                        role="img"
+                      >
                         <Film size={32} />
                         <span>{movie.title}</span>
                       </div>
