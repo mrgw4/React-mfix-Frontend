@@ -11,6 +11,10 @@ const movieResponse = {
     year: 2025,
     genres: ['Drama', 'Mystery'],
     imdb: { rating: 8.7 },
+    tomatoes: {
+      viewer: { meter: 92, rating: 4.4, numReviews: 25000 },
+      critic: { meter: 87, rating: 7.8, numReviews: 150 },
+    },
     runtime: 114,
     fullplot: 'A story from the backend.',
     directors: ['Mara Ellison'],
@@ -69,6 +73,7 @@ describe('movie discovery integration', () => {
     render(<App />)
 
     expect(await screen.findByRole('button', { name: 'The Quiet Between' })).toBeVisible()
+    expect(screen.getByText('RT 92%')).toBeVisible()
     expect(screen.getAllByRole('button', { name: 'Documentary' }).length).toBeGreaterThan(0)
     expect(screen.getByText('Connected to your collection')).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/movies?'), expect.objectContaining({}))
@@ -184,6 +189,8 @@ describe('movie discovery integration', () => {
     await user.type(screen.getByLabelText('Title'), 'Quiet')
     await user.type(screen.getByLabelText('Release year from'), '2020')
     await user.type(screen.getByLabelText('Minimum IMDb rating'), '8')
+    await user.type(screen.getByLabelText('Minimum Rotten Tomatoes audience score'), '80')
+    await user.type(screen.getByLabelText('Maximum Rotten Tomatoes audience rating'), '4.5')
     await user.selectOptions(sortSelect, 'imdbRating')
     await user.selectOptions(sortOrderSelect, 'asc')
     await user.click(screen.getByRole('button', { name: 'Apply filters' }))
@@ -194,6 +201,8 @@ describe('movie discovery integration', () => {
     expect(advancedRequest?.searchParams.get('title')).toBe('Quiet')
     expect(advancedRequest?.searchParams.get('yearMin')).toBe('2020')
     expect(advancedRequest?.searchParams.get('imdbRatingMin')).toBe('8')
+    expect(advancedRequest?.searchParams.get('tomatoesMeterMin')).toBe('80')
+    expect(advancedRequest?.searchParams.get('tomatoesRatingMax')).toBe('4.5')
     expect(advancedRequest?.searchParams.get('sort')).toBe('imdbRating')
     expect(advancedRequest?.searchParams.get('order')).toBe('asc')
     expect(screen.getByText('Advanced filters applied')).toBeInTheDocument()
@@ -226,17 +235,19 @@ describe('movie discovery integration', () => {
   })
 
   it.each([
-    ['Minimum runtime', 'Maximum runtime', 'Minimum runtime must be no greater than maximum runtime.'],
-    ['Minimum IMDb rating', 'Maximum IMDb rating', 'Minimum IMDb rating must be no greater than maximum rating.'],
-    ['Minimum Metacritic score', 'Maximum Metacritic score', 'Minimum Metacritic score must be no greater than maximum score.'],
-  ])('rejects inverted %s and %s filters', async (minimumLabel, maximumLabel, message) => {
+    ['Minimum runtime', 'Maximum runtime', 'Minimum runtime must be no greater than maximum runtime.', '10', '1'],
+    ['Minimum IMDb rating', 'Maximum IMDb rating', 'Minimum IMDb rating must be no greater than maximum rating.', '10', '1'],
+    ['Minimum Metacritic score', 'Maximum Metacritic score', 'Minimum Metacritic score must be no greater than maximum score.', '10', '1'],
+    ['Minimum Rotten Tomatoes audience score', 'Maximum Rotten Tomatoes audience score', 'Minimum Rotten Tomatoes audience score must be no greater than maximum score.', '100', '1'],
+    ['Minimum Rotten Tomatoes audience rating', 'Maximum Rotten Tomatoes audience rating', 'Minimum Rotten Tomatoes audience rating must be no greater than maximum rating.', '5', '1'],
+  ])('rejects inverted %s and %s filters', async (minimumLabel, maximumLabel, message, minimum, maximum) => {
     const user = userEvent.setup()
     render(<App />)
 
     await screen.findByRole('button', { name: 'The Quiet Between' })
     await user.click(screen.getByRole('button', { name: 'Advanced search' }))
-    await user.type(screen.getByLabelText(minimumLabel), '10')
-    await user.type(screen.getByLabelText(maximumLabel), '1')
+    await user.type(screen.getByLabelText(minimumLabel), minimum)
+    await user.type(screen.getByLabelText(maximumLabel), maximum)
     await user.click(screen.getByRole('button', { name: 'Apply filters' }))
 
     expect(screen.getByRole('alert')).toHaveTextContent(message)
@@ -478,6 +489,9 @@ describe('movie discovery integration', () => {
         cast: ['Nina Park'],
         rated: 'PG-13',
         type: 'movie',
+        tomatoes: {
+          viewer: { meter: 92, rating: 4.4, numReviews: 25000 },
+        },
         released: '2025-01-01',
       },
     ]
@@ -513,6 +527,8 @@ describe('movie discovery integration', () => {
       ['Maximum IMDb rating', '7.1'],
       ['Minimum Metacritic score', '71'],
       ['Maximum Metacritic score', '69'],
+      ['Minimum Rotten Tomatoes audience score', '95'],
+      ['Maximum Rotten Tomatoes audience rating', '3'],
     ]
     for (const [label, value] of mismatchingFilters) {
       const field = screen.getByLabelText(label)
@@ -537,6 +553,7 @@ describe('movie discovery integration', () => {
         runtime: 90,
         imdb: { rating: 7 },
         metacritic: 80,
+        tomatoes: { viewer: { meter: 70, rating: 3.2, numReviews: 20 } },
         released: '2020-01-01',
       },
       {
@@ -547,6 +564,7 @@ describe('movie discovery integration', () => {
         runtime: 120,
         imdb: { rating: 9 },
         metacritic: null,
+        tomatoes: { viewer: { meter: 92, rating: 4.7, numReviews: 200 } },
         released: '',
       },
     ]
@@ -572,6 +590,8 @@ describe('movie discovery integration', () => {
       ['runtime', 'asc'],
       ['imdbRating', 'desc'],
       ['metacritic', 'asc'],
+      ['tomatoesMeter', 'asc'],
+      ['tomatoesRating', 'desc'],
       ['released', 'asc'],
     ]
     for (const [sort, order] of sortCases) {
@@ -581,6 +601,11 @@ describe('movie discovery integration', () => {
         expect(screen.getByRole('combobox', { name: 'Sort films' })).toHaveValue(sort)
         expect(screen.getByRole('combobox', { name: 'Sort direction' })).toHaveValue(order)
       })
+      if (sort === 'tomatoesMeter') {
+        expect(document.querySelector('.movie-title')?.textContent).toBe('Zulu')
+      } else if (sort === 'tomatoesRating') {
+        expect(document.querySelector('.movie-title')?.textContent).toBe('Alpha')
+      }
     }
     expect(document.querySelector('.movie-title')?.textContent).toBe('Alpha')
 
@@ -616,6 +641,9 @@ describe('movie discovery integration', () => {
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText('A story from the backend.')).toBeVisible()
     expect(within(dialog).getByText('Mara Ellison')).toBeVisible()
+    expect(within(dialog).getByText('92%')).toBeVisible()
+    expect(within(dialog).getByText('4.4/5 · 25,000 ratings')).toBeVisible()
+    expect(within(dialog).getByText('87% · 150 reviews')).toBeVisible()
     expect(await within(dialog).findByText('Great!')).toBeVisible()
     await user.type(within(dialog).getByLabelText('Your name'), 'A Fan')
     await user.type(within(dialog).getByLabelText('Your comment'), 'Loved it.')

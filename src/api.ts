@@ -13,6 +13,14 @@ export type Movie = {
   rated: string
   type: string
   metacritic: number | null
+  tomatoes: {
+    viewerMeter: number | null
+    viewerRating: number | null
+    viewerNumReviews: number | null
+    criticMeter: number | null
+    criticRating: number | null
+    criticNumReviews: number | null
+  }
   released: string
   posterUrl: string
 }
@@ -48,6 +56,10 @@ export type MovieQuery = {
   imdbRatingMax?: number
   metacriticMin?: number
   metacriticMax?: number
+  tomatoesMeterMin?: number
+  tomatoesMeterMax?: number
+  tomatoesRatingMin?: number
+  tomatoesRatingMax?: number
   sort?: 'title' | 'year' | 'runtime' | 'released' | 'metacritic' | 'imdbRating' | 'tomatoesMeter' | 'tomatoesRating'
   order?: 'asc' | 'desc'
 }
@@ -67,6 +79,10 @@ export type AdvancedMovieFilters = Pick<MovieQuery,
   | 'imdbRatingMax'
   | 'metacriticMin'
   | 'metacriticMax'
+  | 'tomatoesMeterMin'
+  | 'tomatoesMeterMax'
+  | 'tomatoesRatingMin'
+  | 'tomatoesRatingMax'
   | 'sort'
   | 'order'
 >
@@ -126,9 +142,22 @@ function asStringArray(value: unknown): string[] {
   return typeof value === 'string' ? value.split(',').map((item) => item.trim()).filter(Boolean) : []
 }
 
+function asOptionalNumber(value: unknown): number | null {
+  if (
+    (typeof value !== 'number' && typeof value !== 'string')
+    || value === ''
+    || (typeof value === 'string' && !value.trim())
+  ) return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
 function normalizeMovie(value: unknown, index: number): Movie {
   const movie = asRecord(value)
   const imdb = asRecord(movie.imdb)
+  const tomatoes = asRecord(movie.tomatoes)
+  const tomatoesViewer = asRecord(tomatoes.viewer)
+  const tomatoesCritic = asRecord(tomatoes.critic)
   const metacritic = Number(movie.metacritic)
   const directors = asStringArray(movie.directors ?? movie.director)
   return {
@@ -146,6 +175,14 @@ function normalizeMovie(value: unknown, index: number): Movie {
     rated: asString(movie.rated),
     type: asString(movie.type),
     metacritic: Number.isFinite(metacritic) && movie.metacritic !== null && movie.metacritic !== undefined ? metacritic : null,
+    tomatoes: {
+      viewerMeter: asOptionalNumber(tomatoesViewer.meter),
+      viewerRating: asOptionalNumber(tomatoesViewer.rating),
+      viewerNumReviews: asOptionalNumber(tomatoesViewer.numReviews),
+      criticMeter: asOptionalNumber(tomatoesCritic.meter),
+      criticRating: asOptionalNumber(tomatoesCritic.rating),
+      criticNumReviews: asOptionalNumber(tomatoesCritic.numReviews),
+    },
     released: asString(movie.released),
     posterUrl: asString(movie.posterUrl ?? movie.poster_url ?? movie.poster ?? movie.image),
   }
@@ -177,7 +214,11 @@ export async function getMovies(query: MovieQuery = {}): Promise<MoviePage> {
     const value = query[key]?.trim()
     if (value) params[key] = value
   }
-  for (const key of ['yearMin', 'yearMax', 'runtimeMin', 'runtimeMax', 'imdbRatingMin', 'imdbRatingMax', 'metacriticMin', 'metacriticMax'] as const) {
+  for (const key of [
+    'yearMin', 'yearMax', 'runtimeMin', 'runtimeMax', 'imdbRatingMin', 'imdbRatingMax',
+    'metacriticMin', 'metacriticMax', 'tomatoesMeterMin', 'tomatoesMeterMax',
+    'tomatoesRatingMin', 'tomatoesRatingMax',
+  ] as const) {
     const value = query[key]
     if (value !== undefined) params[key] = String(value)
   }

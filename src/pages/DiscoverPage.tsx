@@ -55,6 +55,10 @@ const emptyAdvancedSearch: AdvancedSearchDraft = {
   imdbRatingMax: '',
   metacriticMin: '',
   metacriticMax: '',
+  tomatoesMeterMin: '',
+  tomatoesMeterMax: '',
+  tomatoesRatingMin: '',
+  tomatoesRatingMax: '',
 }
 
 const movieSortOptions: { value: MovieSort; label: string }[] = [
@@ -64,6 +68,8 @@ const movieSortOptions: { value: MovieSort; label: string }[] = [
   { value: 'runtime', label: 'Runtime' },
   { value: 'released', label: 'Release date' },
   { value: 'metacritic', label: 'Metacritic score' },
+  { value: 'tomatoesMeter', label: 'Rotten Tomatoes audience score' },
+  { value: 'tomatoesRating', label: 'Rotten Tomatoes audience rating' },
 ]
 
 type WatchlistFilterOptions = {
@@ -99,6 +105,8 @@ function filterWatchlistMovies(movies: Movie[], options: WatchlistFilterOptions)
       [movie.runtime, options.filters.runtimeMin, options.filters.runtimeMax],
       [movie.rating, options.filters.imdbRatingMin, options.filters.imdbRatingMax],
       [movie.metacritic, options.filters.metacriticMin, options.filters.metacriticMax],
+      [movie.tomatoes.viewerMeter, options.filters.tomatoesMeterMin, options.filters.tomatoesMeterMax],
+      [movie.tomatoes.viewerRating, options.filters.tomatoesRatingMin, options.filters.tomatoesRatingMax],
     ] as const
     return rangeFilters.every(([value, minimum, maximum]) => {
       if (minimum === undefined && maximum === undefined) return true
@@ -111,18 +119,22 @@ function filterWatchlistMovies(movies: Movie[], options: WatchlistFilterOptions)
 function getMovieSortValue(
   movie: Movie,
   sort: NonNullable<AdvancedMovieFilters['sort']>,
-): number | string {
+): number | string | null {
   switch (sort) {
     case 'title':
       return movie.title.toLocaleLowerCase()
     case 'runtime':
       return movie.runtime
     case 'metacritic':
-      return movie.metacritic ?? -1
+      return movie.metacritic
     case 'released':
       return Date.parse(movie.released) || movie.year
     case 'imdbRating':
       return movie.rating
+    case 'tomatoesMeter':
+      return movie.tomatoes.viewerMeter
+    case 'tomatoesRating':
+      return movie.tomatoes.viewerRating
     case 'year':
     default:
       return movie.year
@@ -136,6 +148,10 @@ function sortWatchlistMovies(movies: Movie[], filters: AdvancedMovieFilters, sor
   return [...movies].sort((first, second) => {
     const firstValue = getMovieSortValue(first, sort)
     const secondValue = getMovieSortValue(second, sort)
+    if (firstValue === null || secondValue === null) {
+      if (firstValue === secondValue) return 0
+      return firstValue === null ? 1 : -1
+    }
     const bothValuesAreStrings = typeof firstValue === 'string' && typeof secondValue === 'string'
     const comparison = bothValuesAreStrings
       ? String(firstValue).localeCompare(String(secondValue))
@@ -350,6 +366,8 @@ function DiscoverPage() {
       ['runtimeMin', 'runtimeMax', 'Minimum runtime must be no greater than maximum runtime.'],
       ['imdbRatingMin', 'imdbRatingMax', 'Minimum IMDb rating must be no greater than maximum rating.'],
       ['metacriticMin', 'metacriticMax', 'Minimum Metacritic score must be no greater than maximum score.'],
+      ['tomatoesMeterMin', 'tomatoesMeterMax', 'Minimum Rotten Tomatoes audience score must be no greater than maximum score.'],
+      ['tomatoesRatingMin', 'tomatoesRatingMax', 'Minimum Rotten Tomatoes audience rating must be no greater than maximum rating.'],
     ] as const
     for (const [minimumKey, maximumKey, message] of ranges) {
       const minimum = advancedSearchDraft[minimumKey]
@@ -368,7 +386,11 @@ function DiscoverPage() {
       const value = advancedSearchDraft[field].trim()
       if (value) filters[field] = value
     }
-    for (const field of ['yearMin', 'yearMax', 'runtimeMin', 'runtimeMax', 'imdbRatingMin', 'imdbRatingMax', 'metacriticMin', 'metacriticMax'] as const) {
+    for (const field of [
+      'yearMin', 'yearMax', 'runtimeMin', 'runtimeMax', 'imdbRatingMin', 'imdbRatingMax',
+      'metacriticMin', 'metacriticMax', 'tomatoesMeterMin', 'tomatoesMeterMax',
+      'tomatoesRatingMin', 'tomatoesRatingMax',
+    ] as const) {
       const value = advancedSearchDraft[field]
       if (value) filters[field] = Number(value)
     }
@@ -741,6 +763,60 @@ function DiscoverPage() {
                 />
               </label>
             </fieldset>
+            <fieldset className="advanced-search-range">
+              <legend>Rotten Tomatoes audience score (0–100)</legend>
+              <label>
+                Min
+                <input
+                  aria-label="Minimum Rotten Tomatoes audience score"
+                  max="100"
+                  min="0"
+                  onChange={(event) => updateAdvancedSearchField('tomatoesMeterMin', event.target.value)}
+                  step="1"
+                  type="number"
+                  value={advancedSearchDraft.tomatoesMeterMin}
+                />
+              </label>
+              <label>
+                Max
+                <input
+                  aria-label="Maximum Rotten Tomatoes audience score"
+                  max="100"
+                  min="0"
+                  onChange={(event) => updateAdvancedSearchField('tomatoesMeterMax', event.target.value)}
+                  step="1"
+                  type="number"
+                  value={advancedSearchDraft.tomatoesMeterMax}
+                />
+              </label>
+            </fieldset>
+            <fieldset className="advanced-search-range">
+              <legend>Rotten Tomatoes audience rating (0–5)</legend>
+              <label>
+                Min
+                <input
+                  aria-label="Minimum Rotten Tomatoes audience rating"
+                  max="5"
+                  min="0"
+                  onChange={(event) => updateAdvancedSearchField('tomatoesRatingMin', event.target.value)}
+                  step="0.1"
+                  type="number"
+                  value={advancedSearchDraft.tomatoesRatingMin}
+                />
+              </label>
+              <label>
+                Max
+                <input
+                  aria-label="Maximum Rotten Tomatoes audience rating"
+                  max="5"
+                  min="0"
+                  onChange={(event) => updateAdvancedSearchField('tomatoesRatingMax', event.target.value)}
+                  step="0.1"
+                  type="number"
+                  value={advancedSearchDraft.tomatoesRatingMax}
+                />
+              </label>
+            </fieldset>
 
           </div>
 
@@ -829,6 +905,14 @@ function DiscoverPage() {
                       <span>{movie.year || '—'}</span>
                       <i />
                       {movie.genres.slice(0, 2).join(' · ')}
+                      {movie.tomatoes.viewerMeter !== null && (
+                        <>
+                          <i />
+                          <span className="tomatoes-score" aria-label={`Rotten Tomatoes audience score ${movie.tomatoes.viewerMeter}%`}>
+                            RT {movie.tomatoes.viewerMeter}%
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </article>
@@ -959,6 +1043,38 @@ function DiscoverPage() {
                 <div>
                   <span>STARRING</span>
                   <strong>{selectedMovie.cast.join(', ') || 'Not listed'}</strong>
+                </div>
+                <div>
+                  <span>ROTTEN TOMATOES AUDIENCE SCORE</span>
+                  <strong>
+                    {selectedMovie.tomatoes.viewerMeter === null
+                      ? 'Not rated'
+                      : `${selectedMovie.tomatoes.viewerMeter}%`}
+                  </strong>
+                </div>
+                <div>
+                  <span>ROTTEN TOMATOES AUDIENCE RATING</span>
+                  <strong>
+                    {selectedMovie.tomatoes.viewerRating === null
+                      ? 'Not rated'
+                      : `${selectedMovie.tomatoes.viewerRating}/5${selectedMovie.tomatoes.viewerNumReviews === null ? '' : ` · ${selectedMovie.tomatoes.viewerNumReviews.toLocaleString()} ratings`}`}
+                  </strong>
+                </div>
+                <div>
+                  <span>ROTTEN TOMATOES TOMATOMETER</span>
+                  <strong>
+                    {selectedMovie.tomatoes.criticMeter === null
+                      ? 'Not rated'
+                      : `${selectedMovie.tomatoes.criticMeter}%${selectedMovie.tomatoes.criticNumReviews === null ? '' : ` · ${selectedMovie.tomatoes.criticNumReviews.toLocaleString()} reviews`}`}
+                  </strong>
+                </div>
+                <div>
+                  <span>ROTTEN TOMATOES CRITIC RATING</span>
+                  <strong>
+                    {selectedMovie.tomatoes.criticRating === null
+                      ? 'Not rated'
+                      : `${selectedMovie.tomatoes.criticRating}/10`}
+                  </strong>
                 </div>
               </div>
             </div>

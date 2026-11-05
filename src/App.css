@@ -1319,6 +1319,11 @@
   background: #bcc4bd;
 }
 
+.tomatoes-score {
+  color: #b94a36;
+  font-weight: 600;
+}
+
 .empty-state {
   min-height: 180px;
   display: flex;

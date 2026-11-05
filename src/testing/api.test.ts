@@ -47,6 +47,10 @@ describe('auth API unit tests', () => {
           fullplot: 'The full story.',
           directors: ['A Director'],
           cast: ['An Actor'],
+          tomatoes: {
+            viewer: { meter: 92, rating: 4.4, numReviews: 25000 },
+            critic: { meter: 87, rating: 7.8, numReviews: 150 },
+          },
           poster: 'poster.jpg',
         }],
         pagination: { page: 1, limit: 30, total: 1, pages: 1, hasNextPage: false, hasPrevPage: false },
@@ -73,6 +77,14 @@ describe('auth API unit tests', () => {
           rated: '',
           type: '',
           metacritic: null,
+          tomatoes: {
+            viewerMeter: 92,
+            viewerRating: 4.4,
+            viewerNumReviews: 25000,
+            criticMeter: 87,
+            criticRating: 7.8,
+            criticNumReviews: 150,
+          },
           released: '',
           posterUrl: 'poster.jpg',
         }],
@@ -116,7 +128,9 @@ describe('auth API unit tests', () => {
         directors: 'Denis Villeneuve',
         imdbRatingMin: 7.5,
         yearMax: 2016,
-        sort: 'metacritic',
+        tomatoesMeterMin: 75,
+        tomatoesRatingMax: 4.5,
+        sort: 'tomatoesRating',
         order: 'asc',
       })
 
@@ -125,7 +139,9 @@ describe('auth API unit tests', () => {
       expect(requestUrl.searchParams.get('directors')).toBe('Denis Villeneuve')
       expect(requestUrl.searchParams.get('imdbRatingMin')).toBe('7.5')
       expect(requestUrl.searchParams.get('yearMax')).toBe('2016')
-      expect(requestUrl.searchParams.get('sort')).toBe('metacritic')
+      expect(requestUrl.searchParams.get('tomatoesMeterMin')).toBe('75')
+      expect(requestUrl.searchParams.get('tomatoesRatingMax')).toBe('4.5')
+      expect(requestUrl.searchParams.get('sort')).toBe('tomatoesRating')
       expect(requestUrl.searchParams.get('order')).toBe('asc')
     })
 
@@ -145,6 +161,7 @@ describe('auth API unit tests', () => {
             directors: ['A Director'],
             actors: ['Actor One', 2, null],
             metacritic: 75,
+            tomatoes: { viewer: { meter: '83', rating: '4.1', numReviews: '42' } },
             poster_url: 'poster.png',
           },
           {
@@ -182,12 +199,28 @@ describe('auth API unit tests', () => {
         rating: 6.5,
         plot: 'An overview.',
         metacritic: 75,
+        tomatoes: {
+          viewerMeter: 83,
+          viewerRating: 4.1,
+          viewerNumReviews: 42,
+          criticMeter: null,
+          criticRating: null,
+          criticNumReviews: null,
+        },
         posterUrl: 'poster.png',
       })
       expect(movies[2]).toMatchObject({
         plot: '',
         rating: 8,
         metacritic: null,
+        tomatoes: {
+          viewerMeter: null,
+          viewerRating: null,
+          viewerNumReviews: null,
+          criticMeter: null,
+          criticRating: null,
+          criticNumReviews: null,
+        },
         posterUrl: 'direct-poster.png',
       })
     })
