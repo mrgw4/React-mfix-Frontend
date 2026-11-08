@@ -26,6 +26,7 @@ The backend's default port is `5000`. When using a direct API origin instead of 
 - `npm test`
 
 Unit and integration tests use Vitest and React Testing Library. Run them in watch mode with `npm run test:watch`.
+Run `npm test -- --coverage` to generate a coverage report; the suite enforces at least 98% branch coverage.
 
 Test suites are grouped by feature: `src/testing/api.test.ts` covers authentication API requests and responses, `src/testing/AuthMenu.integration.test.tsx` covers login and registration flows, and `src/testing/App.test.tsx` covers movie discovery and watchlist behavior.
 

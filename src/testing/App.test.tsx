@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
@@ -304,6 +304,24 @@ describe('movie discovery integration', () => {
     expect(screen.queryByText('The Quiet Between')).not.toBeInTheDocument()
   })
 
+  it('shows the empty catalog state when the backend returns no movies', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      return {
+        ok: true,
+        json: async () => url.pathname.endsWith('/genres') ? genresResponse : {
+          ...movieResponse,
+          data: [],
+          pagination: { page: 1, limit: 30, total: 0, pages: 0, hasNextPage: false, hasPrevPage: false },
+        },
+      }
+    }))
+    render(<App />)
+
+    expect(await screen.findByText('No films found')).toBeVisible()
+    expect(screen.getByText('Try another title or clear the genre filter.')).toBeVisible()
+  })
+
   it('uses a fallback message for non-Error movie load failures and retries', async () => {
     const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
       const url = new URL(String(input))
@@ -547,6 +565,17 @@ describe('movie discovery integration', () => {
     const savedMovies = [
       {
         ...movieResponse.data[0],
+        _id: 'second',
+        title: 'Alpha',
+        year: 2025,
+        runtime: 120,
+        imdb: { rating: 9 },
+        metacritic: null,
+        tomatoes: { viewer: { meter: 92, rating: 4.7, numReviews: 200 } },
+        released: '',
+      },
+      {
+        ...movieResponse.data[0],
         _id: 'first',
         title: 'Zulu',
         year: 2020,
@@ -558,17 +587,17 @@ describe('movie discovery integration', () => {
       },
       {
         ...movieResponse.data[0],
-        _id: 'second',
-        title: 'Alpha',
-        year: 2025,
-        runtime: 120,
-        imdb: { rating: 9 },
+        _id: 'third',
+        title: 'Beta',
+        year: 2018,
+        runtime: 100,
+        imdb: { rating: 6 },
         metacritic: null,
-        tomatoes: { viewer: { meter: 92, rating: 4.7, numReviews: 200 } },
-        released: '',
+        tomatoes: { viewer: { meter: null, rating: null, numReviews: null } },
+        released: '2022-01-01',
       },
     ]
-    window.localStorage.setItem('mosaic.watchlist.v1', JSON.stringify(['first', 'second']))
+    window.localStorage.setItem('mosaic.watchlist.v1', JSON.stringify(['second', 'first', 'third']))
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: string | URL | Request) => {
       const url = new URL(String(input))
       const id = url.pathname.split('/').pop()
@@ -661,6 +690,47 @@ describe('movie discovery integration', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('does not apply comments from a closed film to the next film opened', async () => {
+    const secondMovie = { ...movieResponse.data[0], _id: 'movie-456', title: 'Another Story' }
+    let resolveFirstComments!: (response: { ok: boolean; json: () => Promise<unknown> }) => void
+    const firstComments = new Promise<{ ok: boolean; json: () => Promise<unknown> }>((resolve) => {
+      resolveFirstComments = resolve
+    })
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      if (url.pathname.endsWith('/genres')) return { ok: true, json: async () => genresResponse }
+      if (url.pathname === '/api/movies') return { ok: true, json: async () => ({
+        ...movieResponse,
+        data: [...movieResponse.data, secondMovie],
+      }) }
+      if (url.pathname === '/api/comments' && url.searchParams.get('movieId') === 'movie-123') return firstComments
+      if (url.pathname === '/api/comments') return { ok: true, json: async () => [
+        { id: 'second-comment', name: 'Lee', text: 'Comment for the second film.' },
+      ] }
+      return { ok: true, json: async () => movieResponse.data[0] }
+    }))
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'View The Quiet Between' }))
+    await screen.findByRole('dialog')
+    await user.click(screen.getByRole('button', { name: 'Close film details' }))
+    await user.click(await screen.findByRole('button', { name: 'View Another Story' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByText('Comment for the second film.')).toBeVisible()
+    await act(async () => {
+      resolveFirstComments({
+        ok: true,
+        json: async () => [{ id: 'stale-comment', name: 'Lee', text: 'Stale comment from the first film.' }],
+      })
+      await firstComments
+    })
+
+    expect(within(dialog).getByText('Comment for the second film.')).toBeVisible()
+    expect(within(dialog).queryByText('Stale comment from the first film.')).not.toBeInTheDocument()
+  })
+
   it('shows the comment loading state while the post request is pending', async () => {
     let resolveComment!: (response: { ok: boolean; json: () => Promise<unknown> }) => void
     const pendingComment = new Promise<{ ok: boolean; json: () => Promise<unknown> }>((resolve) => {
@@ -736,6 +806,55 @@ describe('movie discovery integration', () => {
     expect((await screen.findByRole('dialog')).querySelector('.detail-hero')).toHaveStyle({
       backgroundImage: expect.stringContaining('poster.png'),
     }    )
+  })
+
+  it('ignores a poster error after its source has been removed', async () => {
+    const movieWithPoster = { ...movieResponse.data[0], poster: 'https://example.test/poster.png' }
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      return {
+        ok: true,
+        json: async () => url.pathname.endsWith('/genres') ? genresResponse
+          : url.pathname === '/api/movies'
+            ? { ...movieResponse, data: [movieWithPoster] }
+            : movieWithPoster,
+      }
+    }))
+    render(<App />)
+
+    const poster = await screen.findByRole('img', { name: 'The Quiet Between film still' })
+    poster.removeAttribute('src')
+    fireEvent.error(poster)
+
+    expect(screen.getByRole('img', { name: 'The Quiet Between film still' })).toBeInTheDocument()
+  })
+
+  it('shows Rotten Tomatoes scores when review counts are unavailable', async () => {
+    const movieWithoutReviewCounts = {
+      ...movieResponse.data[0],
+      tomatoes: {
+        viewer: { meter: 92, rating: 4.1, numReviews: null },
+        critic: { meter: 87, rating: 7.8, numReviews: null },
+      },
+    }
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      return {
+        ok: true,
+        json: async () => url.pathname.endsWith('/genres') ? genresResponse
+          : url.pathname === '/api/movies'
+            ? { ...movieResponse, data: [movieWithoutReviewCounts] }
+            : movieWithoutReviewCounts,
+      }
+    }))
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'View The Quiet Between' }))
+    const dialog = await screen.findByRole('dialog')
+
+    expect(within(dialog).getByText('4.1/5')).toBeVisible()
+    expect(within(dialog).getByText('87%')).toBeVisible()
   })
 
   it('shows the neutral poster placeholder when an image fails to load', async () => {

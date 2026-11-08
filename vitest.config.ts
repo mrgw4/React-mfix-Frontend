@@ -6,7 +6,7 @@ export default mergeConfig(viteConfig, defineConfig({
     environment: 'jsdom',
     coverage: {
       thresholds: {
-        branches: 90,
+        branches: 98,
       },
     },
   },

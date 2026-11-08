@@ -225,6 +225,20 @@ describe('auth API unit tests', () => {
       })
     })
 
+    it('treats non-finite optional scores as unavailable', async () => {
+      stubFetch(jsonResponse({
+        data: [{ tomatoes: { viewer: { meter: 'not-a-score', rating: 'Infinity' } } }],
+        pagination: { page: 1, limit: 30, total: 1, pages: 1, hasNextPage: false, hasPrevPage: false },
+      }))
+
+      const { movies } = await getMovies()
+
+      expect(movies[0].tomatoes).toMatchObject({
+        viewerMeter: null,
+        viewerRating: null,
+      })
+    })
+
     it.each([
       ['data is not an array', { data: {}, pagination: { page: 1, limit: 30, total: 0, pages: 0, hasNextPage: false, hasPrevPage: false } }],
       ['page is not numeric', { data: [], pagination: { page: '1', limit: 30, total: 0, pages: 0, hasNextPage: false, hasPrevPage: false } }],
