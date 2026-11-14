@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { login, logout, register, type AuthSession } from '../api'
+import {
+  createComment,
+  getComments,
+  getGenres,
+  getMovie,
+  getMovies,
+  login,
+  logout,
+  register,
+  type AuthSession,
+} from '../api'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -17,6 +27,321 @@ function stubFetch(response: Response) {
 describe('auth API unit tests', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  describe('movie API unit tests', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it('maps movies from the paginated backend response', async () => {
+      const fetchMock = stubFetch(jsonResponse({
+        data: [{
+          _id: 'movie-1',
+          title: 'A Movie',
+          year: 2000,
+          genres: ['Drama'],
+          imdb: { rating: 7.5 },
+          runtime: 90,
+          plot: 'A story.',
+          fullplot: 'The full story.',
+          directors: ['A Director'],
+          cast: ['An Actor'],
+          tomatoes: {
+            viewer: { meter: 92, rating: 4.4, numReviews: 25000 },
+            critic: { meter: 87, rating: 7.8, numReviews: 150 },
+          },
+          poster: 'poster.jpg',
+        }],
+        pagination: { page: 1, limit: 30, total: 1, pages: 1, hasNextPage: false, hasPrevPage: false },
+      }))
+
+      await expect(getMovies({
+        page: 3,
+        genres: ['Documentary', 'Drama'],
+        search: 'Mara',
+        sortByRating: true,
+      })).resolves.toEqual({
+        movies: [{
+          id: 'movie-1',
+          title: 'A Movie',
+          year: 2000,
+          genres: ['Drama'],
+          rating: 7.5,
+          runtime: 90,
+          plot: 'The full story.',
+          plotForFiltering: 'A story.',
+          director: 'A Director',
+          directors: ['A Director'],
+          cast: ['An Actor'],
+          rated: '',
+          type: '',
+          metacritic: null,
+          tomatoes: {
+            viewerMeter: 92,
+            viewerRating: 4.4,
+            viewerNumReviews: 25000,
+            criticMeter: 87,
+            criticRating: 7.8,
+            criticNumReviews: 150,
+          },
+          released: '',
+          posterUrl: 'poster.jpg',
+        }],
+        pagination: {
+          page: 1,
+          limit: 30,
+          total: 1,
+          pages: 1,
+          hasNextPage: false,
+          hasPrevPage: false,
+        },
+      })
+      const requestUrl = new URL(String(fetchMock.mock.calls[0][0]))
+      expect(requestUrl.pathname).toBe('/api/movies')
+      expect(requestUrl.searchParams.get('page')).toBe('3')
+      expect(requestUrl.searchParams.get('limit')).toBe('30')
+      expect(requestUrl.searchParams.get('genres')).toBe('Documentary,Drama')
+      expect(requestUrl.searchParams.get('search')).toBe('Mara')
+      expect(requestUrl.searchParams.get('sort')).toBe('imdbRating')
+      expect(requestUrl.searchParams.get('order')).toBe('desc')
+    })
+
+    it('loads and normalizes genres from the backend genres endpoint', async () => {
+      const fetchMock = stubFetch(jsonResponse({ genres: ['Drama', 'Mystery', 'Drama', ' '] }))
+
+      await expect(getGenres()).resolves.toEqual(['Drama', 'Mystery'])
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/api/movies/genres'),
+        expect.objectContaining({}),
+      )
+    })
+
+    it('sends advanced movie criteria and sorting to the backend', async () => {
+      const fetchMock = stubFetch(jsonResponse({
+        data: [],
+        pagination: { page: 1, limit: 30, total: 0, pages: 0, hasNextPage: false, hasPrevPage: false },
+      }))
+
+      await getMovies({
+        title: '  Arrival  ',
+        directors: 'Denis Villeneuve',
+        imdbRatingMin: 7.5,
+        yearMax: 2016,
+        tomatoesMeterMin: 75,
+        tomatoesRatingMax: 4.5,
+        sort: 'tomatoesRating',
+        order: 'asc',
+      })
+
+      const requestUrl = new URL(String(fetchMock.mock.calls[0][0]))
+      expect(requestUrl.searchParams.get('title')).toBe('Arrival')
+      expect(requestUrl.searchParams.get('directors')).toBe('Denis Villeneuve')
+      expect(requestUrl.searchParams.get('imdbRatingMin')).toBe('7.5')
+      expect(requestUrl.searchParams.get('yearMax')).toBe('2016')
+      expect(requestUrl.searchParams.get('tomatoesMeterMin')).toBe('75')
+      expect(requestUrl.searchParams.get('tomatoesRatingMax')).toBe('4.5')
+      expect(requestUrl.searchParams.get('sort')).toBe('tomatoesRating')
+      expect(requestUrl.searchParams.get('order')).toBe('asc')
+    })
+
+    it('normalizes alternate movie field shapes and supplies safe fallbacks', async () => {
+      stubFetch(jsonResponse({
+        data: [
+          null,
+          {
+            id: 'alternate-movie',
+            title: 42,
+            year: '0',
+            genre: 'Drama, Mystery',
+            rating: 6.5,
+            runtime: '90',
+            overview: 'An overview.',
+            director: 'A Director',
+            directors: ['A Director'],
+            actors: ['Actor One', 2, null],
+            metacritic: 75,
+            tomatoes: { viewer: { meter: '83', rating: '4.1', numReviews: '42' } },
+            poster_url: 'poster.png',
+          },
+          {
+            _id: 'empty-movie',
+            genres: [null, 7, 'Comedy'],
+            imdb: null,
+            vote_average: 8,
+            metacritic: 'not-a-score',
+            posterUrl: 'direct-poster.png',
+            poster: 'fallback-poster.png',
+          },
+        ],
+        pagination: { page: 1, limit: 30, total: 3, pages: 1, hasNextPage: false, hasPrevPage: false },
+      }))
+
+      const { movies } = await getMovies()
+      expect(movies[0]).toMatchObject({
+        id: 'movie-0',
+        title: 'Untitled film',
+        genres: [],
+        directors: [],
+        director: '',
+        cast: [],
+        plot: '',
+        posterUrl: '',
+        metacritic: null,
+      })
+      expect(movies[1]).toMatchObject({
+        id: 'alternate-movie',
+        title: '42',
+        genres: ['Drama', 'Mystery'],
+        directors: ['A Director'],
+        director: 'A Director',
+        cast: ['Actor One', '2'],
+        rating: 6.5,
+        plot: 'An overview.',
+        metacritic: 75,
+        tomatoes: {
+          viewerMeter: 83,
+          viewerRating: 4.1,
+          viewerNumReviews: 42,
+          criticMeter: null,
+          criticRating: null,
+          criticNumReviews: null,
+        },
+        posterUrl: 'poster.png',
+      })
+      expect(movies[2]).toMatchObject({
+        plot: '',
+        rating: 8,
+        metacritic: null,
+        tomatoes: {
+          viewerMeter: null,
+          viewerRating: null,
+          viewerNumReviews: null,
+          criticMeter: null,
+          criticRating: null,
+          criticNumReviews: null,
+        },
+        posterUrl: 'direct-poster.png',
+      })
+    })
+
+    it('treats non-finite optional scores as unavailable', async () => {
+      stubFetch(jsonResponse({
+        data: [{ tomatoes: { viewer: { meter: 'not-a-score', rating: 'Infinity' } } }],
+        pagination: { page: 1, limit: 30, total: 1, pages: 1, hasNextPage: false, hasPrevPage: false },
+      }))
+
+      const { movies } = await getMovies()
+
+      expect(movies[0].tomatoes).toMatchObject({
+        viewerMeter: null,
+        viewerRating: null,
+      })
+    })
+
+    it.each([
+      ['data is not an array', { data: {}, pagination: { page: 1, limit: 30, total: 0, pages: 0, hasNextPage: false, hasPrevPage: false } }],
+      ['page is not numeric', { data: [], pagination: { page: '1', limit: 30, total: 0, pages: 0, hasNextPage: false, hasPrevPage: false } }],
+      ['limit is not numeric', { data: [], pagination: { page: 1, limit: '30', total: 0, pages: 0, hasNextPage: false, hasPrevPage: false } }],
+      ['total is not numeric', { data: [], pagination: { page: 1, limit: 30, total: '0', pages: 0, hasNextPage: false, hasPrevPage: false } }],
+      ['pages is not numeric', { data: [], pagination: { page: 1, limit: 30, total: 0, pages: '0', hasNextPage: false, hasPrevPage: false } }],
+      ['hasNextPage is not boolean', { data: [], pagination: { page: 1, limit: 30, total: 0, pages: 0, hasNextPage: 0, hasPrevPage: false } }],
+      ['hasPrevPage is not boolean', { data: [], pagination: { page: 1, limit: 30, total: 0, pages: 0, hasNextPage: false, hasPrevPage: 0 } }],
+    ])('rejects invalid movie list response when %s', async (_description, body) => {
+      stubFetch(jsonResponse(body))
+      await expect(getMovies()).rejects.toThrow('The server returned an invalid movie list response.')
+    })
+
+    it('uses the year default when rating sorting is disabled and preserves zero range bounds', async () => {
+      const fetchMock = stubFetch(jsonResponse({
+        data: [],
+        pagination: { page: 1, limit: 30, total: 0, pages: 0, hasNextPage: false, hasPrevPage: false },
+      }))
+
+      await getMovies({
+        sortByRating: false,
+        yearMin: 0,
+        runtimeMax: 0,
+        metacriticMin: 0,
+        title: '   ',
+        genres: [],
+      })
+
+      const url = new URL(String(fetchMock.mock.calls[0][0]))
+      expect(url.searchParams.get('sort')).toBe('year')
+      expect(url.searchParams.get('yearMin')).toBe('0')
+      expect(url.searchParams.get('runtimeMax')).toBe('0')
+      expect(url.searchParams.get('metacriticMin')).toBe('0')
+      expect(url.searchParams.has('title')).toBe(false)
+      expect(url.searchParams.has('genres')).toBe(false)
+    })
+
+    it('encodes movie IDs and normalizes a movie fetched by ID', async () => {
+      const fetchMock = stubFetch(jsonResponse({ _id: 'movie/one', director: 'Solo Director', actors: 'One, Two' }))
+
+      await expect(getMovie('movie/one')).resolves.toMatchObject({
+        id: 'movie/one',
+        director: 'Solo Director',
+        directors: ['Solo Director'],
+        cast: ['One', 'Two'],
+      })
+      expect(String(fetchMock.mock.calls[0][0])).toContain('/api/movies/movie%2Fone')
+    })
+
+    it.each([
+      ['missing list', {}],
+      ['non-array list', { genres: 'Drama' }],
+      ['invalid genre member', { genres: ['Drama', 1] }],
+    ])('rejects invalid genre responses with %s', async (_description, body) => {
+      stubFetch(jsonResponse(body))
+      await expect(getGenres()).rejects.toThrow('The server returned an invalid genres response.')
+    })
+
+    it('rejects a failed regular API request', async () => {
+      stubFetch(jsonResponse({ error: 'Unavailable' }, 503))
+      await expect(getMovie('movie-1')).rejects.toThrow('Request failed (503).')
+    })
+  })
+
+  describe('comments API unit tests', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it.each([
+      ['array payload', [{ _id: 'comment-1', name: 'Sam', comment: 'Great!', createdAt: '2025-01-02' }]],
+      ['comments field', { comments: [{ id: 'comment-2', name: 'Lee', text: 'Nice.' }] }],
+      ['results field', { results: [{ id: 'comment-3', text: 'Good.' }] }],
+      ['data field', { data: [{ id: 'comment-4', text: 'Loved it.' }] }],
+      ['unknown payload', { unexpected: true }],
+    ])('unwraps comments from %s', async (_description, body) => {
+      stubFetch(jsonResponse(body))
+      const result = await getComments('movie-1')
+      expect(result).toHaveLength(Array.isArray(body) ? 1 : 'unexpected' in body ? 0 : 1)
+    })
+
+    it('posts a comment and normalizes a wrapped comment response', async () => {
+      const fetchMock = stubFetch(jsonResponse({
+        comment: { _id: 'comment-5', name: '  Sam  ', comment: '  Wonderful  ' },
+      }, 201))
+
+      await expect(createComment({ movieId: 'movie-1', name: 'Sam', text: 'Wonderful' }))
+        .resolves.toMatchObject({ id: 'comment-5', name: '  Sam  ', text: '  Wonderful  ' })
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/api/comments'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ movie_id: 'movie-1', name: 'Sam', text: 'Wonderful' }),
+        }),
+      )
+    })
+
+    it('normalizes an unwrapped comment response', async () => {
+      stubFetch(jsonResponse({ id: 'comment-6', text: 'A single comment.' }))
+
+      await expect(createComment({ movieId: 'movie-1', name: 'Sam', text: 'A single comment.' }))
+        .resolves.toMatchObject({ id: 'comment-6', text: 'A single comment.' })
+    })
   })
 
   it('posts credentials and normalizes a valid login session', async () => {

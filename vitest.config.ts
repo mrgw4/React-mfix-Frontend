@@ -4,5 +4,10 @@ import viteConfig from './vite.config.ts'
 export default mergeConfig(viteConfig, defineConfig({
   test: {
     environment: 'jsdom',
+    coverage: {
+      thresholds: {
+        branches: 98,
+      },
+    },
   },
 }))

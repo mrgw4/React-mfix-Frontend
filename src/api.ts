@@ -6,10 +6,88 @@ export type Movie = {
   rating: number
   runtime: number
   plot: string
+  plotForFiltering: string
   director: string
+  directors: string[]
   cast: string[]
+  rated: string
+  type: string
+  metacritic: number | null
+  tomatoes: {
+    viewerMeter: number | null
+    viewerRating: number | null
+    viewerNumReviews: number | null
+    criticMeter: number | null
+    criticRating: number | null
+    criticNumReviews: number | null
+  }
+  released: string
   posterUrl: string
 }
+
+export type MoviePage = {
+  movies: Movie[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    pages: number
+    hasNextPage: boolean
+    hasPrevPage: boolean
+  }
+}
+
+export type MovieQuery = {
+  page?: number
+  genres?: string[]
+  search?: string
+  sortByRating?: boolean
+  title?: string
+  plot?: string
+  directors?: string
+  cast?: string
+  rated?: string
+  type?: string
+  yearMin?: number
+  yearMax?: number
+  runtimeMin?: number
+  runtimeMax?: number
+  imdbRatingMin?: number
+  imdbRatingMax?: number
+  metacriticMin?: number
+  metacriticMax?: number
+  tomatoesMeterMin?: number
+  tomatoesMeterMax?: number
+  tomatoesRatingMin?: number
+  tomatoesRatingMax?: number
+  sort?: 'title' | 'year' | 'runtime' | 'released' | 'metacritic' | 'imdbRating' | 'tomatoesMeter' | 'tomatoesRating'
+  order?: 'asc' | 'desc'
+}
+
+export type AdvancedMovieFilters = Pick<MovieQuery,
+  | 'title'
+  | 'plot'
+  | 'directors'
+  | 'cast'
+  | 'rated'
+  | 'type'
+  | 'yearMin'
+  | 'yearMax'
+  | 'runtimeMin'
+  | 'runtimeMax'
+  | 'imdbRatingMin'
+  | 'imdbRatingMax'
+  | 'metacriticMin'
+  | 'metacriticMax'
+  | 'tomatoesMeterMin'
+  | 'tomatoesMeterMax'
+  | 'tomatoesRatingMin'
+  | 'tomatoesRatingMax'
+  | 'sort'
+  | 'order'
+>
+export type MovieSort = NonNullable<MovieQuery['sort']>
+export type MovieSortOrder = NonNullable<MovieQuery['order']>
 
 export type MovieComment = { id: string; name: string; text: string; date: string }
 type CommentInput = { movieId: string; name: string; text: string }
@@ -64,9 +142,24 @@ function asStringArray(value: unknown): string[] {
   return typeof value === 'string' ? value.split(',').map((item) => item.trim()).filter(Boolean) : []
 }
 
+function asOptionalNumber(value: unknown): number | null {
+  if (
+    (typeof value !== 'number' && typeof value !== 'string')
+    || value === ''
+    || (typeof value === 'string' && !value.trim())
+  ) return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
 function normalizeMovie(value: unknown, index: number): Movie {
   const movie = asRecord(value)
   const imdb = asRecord(movie.imdb)
+  const tomatoes = asRecord(movie.tomatoes)
+  const tomatoesViewer = asRecord(tomatoes.viewer)
+  const tomatoesCritic = asRecord(tomatoes.critic)
+  const metacritic = Number(movie.metacritic)
+  const directors = asStringArray(movie.directors ?? movie.director)
   return {
     id: asString(movie._id ?? movie.id, `movie-${index}`),
     title: asString(movie.title, 'Untitled film'),
@@ -75,8 +168,22 @@ function normalizeMovie(value: unknown, index: number): Movie {
     rating: Number(imdb.rating ?? movie.rating ?? movie.vote_average) || 0,
     runtime: Number(movie.runtime) || 0,
     plot: asString(movie.fullplot ?? movie.plot ?? movie.overview),
-    director: asString(movie.director ?? asStringArray(movie.directors)[0]),
+    plotForFiltering: asString(movie.plot),
+    director: asString(movie.director ?? directors[0]),
+    directors,
     cast: asStringArray(movie.cast ?? movie.actors),
+    rated: asString(movie.rated),
+    type: asString(movie.type),
+    metacritic: Number.isFinite(metacritic) && movie.metacritic !== null && movie.metacritic !== undefined ? metacritic : null,
+    tomatoes: {
+      viewerMeter: asOptionalNumber(tomatoesViewer.meter),
+      viewerRating: asOptionalNumber(tomatoesViewer.rating),
+      viewerNumReviews: asOptionalNumber(tomatoesViewer.numReviews),
+      criticMeter: asOptionalNumber(tomatoesCritic.meter),
+      criticRating: asOptionalNumber(tomatoesCritic.rating),
+      criticNumReviews: asOptionalNumber(tomatoesCritic.numReviews),
+    },
+    released: asString(movie.released),
     posterUrl: asString(movie.posterUrl ?? movie.poster_url ?? movie.poster ?? movie.image),
   }
 }
@@ -93,9 +200,74 @@ function unwrapList(payload: unknown): unknown[] {
   return []
 }
 
-export async function getMovies(): Promise<Movie[]> {
-  const payload = await request<unknown>(endpointUrl(moviesEndpoint, { limit: '30' }))
-  return unwrapList(payload).map(normalizeMovie)
+export async function getMovies(query: MovieQuery = {}): Promise<MoviePage> {
+  const params: Record<string, string> = {
+    page: String(query.page ?? 1),
+    limit: '30',
+    sort: query.sortByRating ? 'imdbRating' : 'year',
+    order: 'desc',
+  }
+  const search = query.search?.trim()
+  if (search) params.search = search
+  if (query.genres?.length) params.genres = query.genres.join(',')
+  for (const key of ['title', 'plot', 'directors', 'cast', 'rated', 'type'] as const) {
+    const value = query[key]?.trim()
+    if (value) params[key] = value
+  }
+  for (const key of [
+    'yearMin', 'yearMax', 'runtimeMin', 'runtimeMax', 'imdbRatingMin', 'imdbRatingMax',
+    'metacriticMin', 'metacriticMax', 'tomatoesMeterMin', 'tomatoesMeterMax',
+    'tomatoesRatingMin', 'tomatoesRatingMax',
+  ] as const) {
+    const value = query[key]
+    if (value !== undefined) params[key] = String(value)
+  }
+  if (query.sort) params.sort = query.sort
+  else params.sort = query.sortByRating ? 'imdbRating' : 'year'
+  if (query.order) params.order = query.order
+  else params.order = 'desc'
+
+  const payload = asRecord(await request<unknown>(endpointUrl(moviesEndpoint, params)))
+  const pagination = asRecord(payload.pagination)
+  if (
+    !Array.isArray(payload.data)
+    || typeof pagination.page !== 'number'
+    || typeof pagination.limit !== 'number'
+    || typeof pagination.total !== 'number'
+    || typeof pagination.pages !== 'number'
+    || typeof pagination.hasNextPage !== 'boolean'
+    || typeof pagination.hasPrevPage !== 'boolean'
+  ) {
+    throw new Error('The server returned an invalid movie list response.')
+  }
+
+  return {
+    movies: payload.data.map(normalizeMovie),
+    pagination: {
+      page: pagination.page,
+      limit: pagination.limit,
+      total: pagination.total,
+      pages: pagination.pages,
+      hasNextPage: pagination.hasNextPage,
+      hasPrevPage: pagination.hasPrevPage,
+    },
+  }
+}
+
+export async function getMovie(id: string): Promise<Movie> {
+  const endpoint = `${moviesEndpoint.replace(/\/$/, '')}/${encodeURIComponent(id)}`
+  return normalizeMovie(await request<unknown>(endpointUrl(endpoint)), 0)
+}
+
+export async function getGenres(): Promise<string[]> {
+  const endpoint = `${moviesEndpoint.replace(/\/$/, '')}/genres`
+  const payload = await request<unknown>(endpointUrl(endpoint))
+  const genres = asRecord(payload).genres
+  if (!Array.isArray(genres) || genres.some((genre) => typeof genre !== 'string')) {
+    throw new Error('The server returned an invalid genres response.')
+  }
+  return [...new Set(genres.map((genre) => genre.trim()).filter(Boolean))]
+    .sort((first, second) => first.localeCompare(second))
 }
 
 export async function getComments(movieId: string): Promise<MovieComment[]> {

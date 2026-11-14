@@ -38,7 +38,11 @@ function jsonResponse(body: unknown, status = 200): Response {
 function stubBackend(authResponses: AuthResponses = {}) {
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
-    if (url.endsWith('/api/movies?limit=30')) return jsonResponse(movieResponse)
+    if (url.endsWith('/api/movies/genres')) return jsonResponse({ genres: ['Drama', 'Mystery'] })
+    if (new URL(url).pathname === '/api/movies') return jsonResponse({
+      ...movieResponse,
+      pagination: { page: 1, limit: 30, total: 1, pages: 1, hasNextPage: false, hasPrevPage: false },
+    })
 
     const route: AuthRoute | undefined = url.endsWith('/api/users') && init?.method === 'POST'
       ? 'register'
@@ -64,6 +68,7 @@ describe('account menu integration', () => {
     cleanup()
     window.localStorage.clear()
     vi.unstubAllGlobals()
+    vi.restoreAllMocks()
   })
 
   it('opens and closes the login menu with Escape or an outside click', async () => {
@@ -118,6 +123,32 @@ describe('account menu integration', () => {
     }))
   })
 
+  it('keeps guest and signed-in watchlists separate when the account changes', async () => {
+    window.localStorage.setItem('mosaic.watchlist.v1', JSON.stringify(['guest-movie']))
+    window.localStorage.setItem('mosaic.watchlist.v1.user.user-1', JSON.stringify(['account-movie-1', 'account-movie-2']))
+    stubBackend({ login: () => jsonResponse(session) })
+    const user = userEvent.setup()
+    render(<App />)
+    const watchlistButton = screen.getByRole('button', { name: /Watchlist/ })
+
+    expect(watchlistButton).toHaveTextContent('1')
+    await user.click(screen.getByRole('button', { name: 'Open login menu' }))
+    await user.type(screen.getByLabelText('Email'), 'jane@example.com')
+    await user.type(screen.getByLabelText('Password'), 'correct-password')
+    await user.click(screen.getByRole('button', { name: 'Log in' }))
+
+    expect(await screen.findByRole('button', { name: 'Account menu for Jane Doe' })).toBeVisible()
+    expect(watchlistButton).toHaveTextContent('2')
+    expect(window.localStorage.getItem('mosaic.watchlist.v1.user.user-1'))
+      .toBe(JSON.stringify(['account-movie-1', 'account-movie-2']))
+
+    await user.click(screen.getByRole('button', { name: 'Log out' }))
+
+    expect(await screen.findByRole('button', { name: 'Open login menu' })).toBeVisible()
+    expect(watchlistButton).toHaveTextContent('1')
+    expect(window.localStorage.getItem('mosaic.watchlist.v1.guest')).toBe(JSON.stringify(['guest-movie']))
+  })
+
   it('does not send registration when the passwords differ', async () => {
     const fetchMock = stubBackend()
     const user = userEvent.setup()
@@ -169,6 +200,22 @@ describe('account menu integration', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Email already in use')
     expect(screen.getByLabelText('Username')).toBeInTheDocument()
+  })
+
+  it('shows a fallback error when registration rejects with a non-Error value', async () => {
+    stubBackend({ register: () => Promise.reject('Unexpected registration failure') })
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Open login menu' }))
+    await user.click(screen.getByRole('button', { name: /Create one/ }))
+    await user.type(screen.getByLabelText('Username'), 'Jane Doe')
+    await user.type(screen.getByLabelText('Email'), 'jane@example.com')
+    await user.type(screen.getByLabelText('Password'), 'correct-password')
+    await user.type(screen.getByLabelText('Confirm password'), 'correct-password')
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not create your account.')
   })
 
   it('shows credential errors above the email field after a rejected login', async () => {
@@ -233,5 +280,170 @@ describe('account menu integration', () => {
     expect(screen.getByRole('button', { name: 'Account menu for Jane Doe' })).toBeInTheDocument()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Account menu for Jane Doe' }))
     expect(within(screen.getByRole('region', { name: 'Account menu' })).getByText('jane@example.com')).toBeInTheDocument()
+  })
+
+  it('ignores malformed saved auth and watchlist data', async () => {
+    window.localStorage.setItem(authStorageKey, '{invalid')
+    window.localStorage.setItem('mosaic.watchlist.v1.guest', '{"not":"an array"}')
+    render(<App />)
+
+    expect(screen.getByRole('button', { name: 'Open login menu' })).toBeVisible()
+    expect(screen.getByRole('button', { name: /Watchlist/ })).toHaveTextContent('0')
+  })
+
+  it.each([null, {}, { user: null }])('ignores structurally invalid saved auth data: %j', (savedSession) => {
+    window.localStorage.setItem(authStorageKey, JSON.stringify(savedSession))
+    render(<App />)
+
+    expect(screen.getByRole('button', { name: 'Open login menu' })).toBeVisible()
+  })
+
+  it('filters non-string watchlist IDs from saved storage', () => {
+    window.localStorage.setItem('mosaic.watchlist.v1.guest', JSON.stringify(['movie-1', 42, null, 'movie-2']))
+    render(<App />)
+
+    expect(screen.getByRole('button', { name: /Watchlist/ })).toHaveTextContent('2')
+  })
+
+  it('continues with an empty watchlist when browser storage cannot be read', () => {
+    const originalGetItem = Storage.prototype.getItem
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (this: Storage, key) {
+      if (key.startsWith('mosaic.watchlist.')) throw new Error('Storage unavailable')
+      return originalGetItem.call(this, key)
+    })
+    render(<App />)
+
+    expect(screen.getByRole('button', { name: /Watchlist/ })).toHaveTextContent('0')
+  })
+
+  it('keeps the watchlist usable when browser storage cannot save it', async () => {
+    const originalSetItem = Storage.prototype.setItem
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+      if (key.startsWith('mosaic.watchlist.')) throw new Error('Storage unavailable')
+      originalSetItem.call(this, key, value)
+    })
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'Add The Quiet Between to watchlist' }))
+
+    expect(screen.getByRole('button', { name: 'Remove The Quiet Between from watchlist' }))
+      .toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('reports a browser storage failure after a successful login', async () => {
+    const originalSetItem = Storage.prototype.setItem
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+      if (key === authStorageKey) throw new Error('Storage unavailable')
+      originalSetItem.call(this, key, value)
+    })
+    stubBackend({ login: () => jsonResponse(session) })
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Open login menu' }))
+    await user.type(screen.getByLabelText('Email'), 'jane@example.com')
+    await user.type(screen.getByLabelText('Password'), 'correct-password')
+    await user.click(screen.getByRole('button', { name: 'Log in' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'You are signed in, but this browser could not save your session.',
+    )
+    expect(screen.getByRole('button', { name: 'Account menu for Jane Doe' })).toBeVisible()
+  })
+
+  it('finishes sign-out and reports when browser storage cannot clear the session', async () => {
+    window.localStorage.setItem(authStorageKey, JSON.stringify(session))
+    const originalRemoveItem = Storage.prototype.removeItem
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(function (this: Storage, key) {
+      if (key === authStorageKey) throw new Error('Storage unavailable')
+      originalRemoveItem.call(this, key)
+    })
+    stubBackend({ logout: () => jsonResponse({ message: 'Logged out successfully' }) })
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Account menu for Jane Doe' }))
+    await user.click(screen.getByRole('button', { name: 'Log out' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Signed out, but this browser could not clear the saved session.',
+    )
+    expect(screen.getByRole('button', { name: 'Open login menu' })).toBeVisible()
+  })
+
+  it('uses the fallback logout error for a non-Error server failure', async () => {
+    window.localStorage.setItem(authStorageKey, JSON.stringify(session))
+    stubBackend({ logout: () => Promise.reject('Unexpected logout failure') })
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Account menu for Jane Doe' }))
+    await user.click(screen.getByRole('button', { name: 'Log out' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Signed out here, but the server could not end the session: Request failed.',
+    )
+  })
+
+  it('shows a fallback error when login rejects with a non-Error value', async () => {
+    stubBackend({ login: () => Promise.reject('Unexpected login failure') })
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Open login menu' }))
+    await user.type(screen.getByLabelText('Email'), 'jane@example.com')
+    await user.type(screen.getByLabelText('Password'), 'correct-password')
+    await user.click(screen.getByRole('button', { name: 'Log in' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not sign in.')
+  })
+
+  it('clears registration fields when switching back to login', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Open login menu' }))
+    await user.click(screen.getByRole('button', { name: /Create one/ }))
+    await user.type(screen.getByLabelText('Username'), 'Jane Doe')
+    await user.type(screen.getByLabelText('Confirm password'), 'temporary-password')
+    await user.click(screen.getByRole('button', { name: 'Already have an account? Log in' }))
+
+    expect(screen.queryByLabelText('Username')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Email')).toHaveValue('')
+  })
+
+  it('shows genre loading errors in the sidebar and catalog', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      if (url.pathname.endsWith('/genres')) {
+        return { ok: false, status: 503, json: async () => ({}) }
+      }
+      if (url.pathname === '/api/movies') {
+        return jsonResponse({
+          ...movieResponse,
+          pagination: { page: 1, limit: 30, total: 1, pages: 1, hasNextPage: false, hasPrevPage: false },
+        })
+      }
+      return jsonResponse(movieResponse.data[0])
+    }))
+    render(<App />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load genres: Request failed (503).')
+    expect(screen.getByRole('button', { name: 'The Quiet Between' })).toBeVisible()
+  })
+
+  it('uses a fallback genre error when loading rejects with a non-Error value', async () => {
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      const url = new URL(String(input))
+      if (url.pathname.endsWith('/genres')) return Promise.reject('Unexpected genre failure')
+      return Promise.resolve(jsonResponse({
+        ...movieResponse,
+        pagination: { page: 1, limit: 30, total: 1, pages: 1, hasNextPage: false, hasPrevPage: false },
+      }))
+    }))
+    render(<App />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load genres.')
   })
 })

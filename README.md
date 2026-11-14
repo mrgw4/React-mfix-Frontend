@@ -9,13 +9,13 @@ React + TypeScript movie discovery UI for the MFlix API in `Example-Blog-Backend
 3. Copy `.env.example` to `.env.local`; leave `VITE_API_BASE_URL` blank to use the Vite proxy, which forwards `/api` requests to `http://localhost:5000`.
 4. Start the frontend with `npm run dev`.
 
-If the backend is unreachable, the page displays the connection error and a retry action instead of sample data. Movie cards include search, genre filters, sorting, details, and a watchlist persisted in this browser's local storage. The watchlist does not sync across browsers or devices.
+If the backend is unreachable, the page displays the connection error and a retry action instead of sample data. Movie cards include search, genre filters, sorting, details, and a watchlist persisted in this browser's local storage. Signed-in accounts and guests have separate watchlists, so switching accounts does not show another profile's saved films. Select multiple genre pills to find films that match every selected genre; choose All films to clear the genre selection. The advanced-search panel supports title, plot, director, cast, content rating, movie type, year/runtime/IMDb/Metacritic/Rotten Tomatoes audience-score ranges, and sorting. Movie details show available Rotten Tomatoes audience and critic scores, ratings, and review counts. Search and sort criteria are sent to the backend and applied across the complete collection. Watchlist entries are loaded by their saved movie IDs and displayed 30 per page, without needing to fetch the rest of the catalog. The watchlist does not sync across browsers or devices.
 
 ## API contract
 
-By default the frontend calls `GET /api/movies?limit=30` and `GET /api/comments?movieId=<id>`. Configure the route paths with `VITE_MOVIES_ENDPOINT` and `VITE_COMMENTS_ENDPOINT` if your backend differs. Account registration and login use `POST /api/users` and `POST /api/users/login`; configure `VITE_USERS_ENDPOINT` if the users route differs. Registration sends the username as the backend's `name` field and requires an email and matching password entries. For a deployed frontend, set `VITE_API_BASE_URL` to the API origin and configure the backend to allow that origin; the Vite proxy is for local development only.
+By default the frontend calls paginated `GET /api/movies?page=<page>&limit=30`, `GET /api/movies/genres`, and `GET /api/comments?movieId=<id>`. Search, genre, and sort filters are sent to the backend so they apply to the complete collection, not just the current page. Configure the route paths with `VITE_MOVIES_ENDPOINT` and `VITE_COMMENTS_ENDPOINT` if your backend differs. Account registration and login use `POST /api/users` and `POST /api/users/login`; configure `VITE_USERS_ENDPOINT` if the users route differs. Registration sends the username as the backend's `name` field and requires an email and matching password entries. For a deployed frontend, set `VITE_API_BASE_URL` to the API origin and configure the backend to allow that origin; the Vite proxy is for local development only.
 
-The backend returns paginated movies in `data`; the adapter maps MFlix fields such as `_id`, `imdb.rating`, `fullplot`, `genres`, `directors`, `cast`, and `poster` to the UI model. Comment lists are fetched using the backend's `movieId` query parameter. Posting comments requires an authenticated backend session, which is not currently managed by this frontend.
+The backend returns paginated movies in `data`; the adapter maps MFlix fields such as `_id`, `imdb.rating`, `fullplot`, `genres`, `directors`, `cast`, and `poster` to the UI model. Genre filters are populated from the backend's distinct genre list, rather than a hard-coded subset. Text search matches titles, directors, and genres across the full collection; advanced field filters, numeric ranges, pagination, genre filtering, and sorting are also handled by the backend. Comment lists are fetched using the backend's `movieId` query parameter. Posting comments requires an authenticated backend session, which is not currently managed by this frontend.
 
 The backend's default port is `5000`. When using a direct API origin instead of the local Vite proxy, the backend must enable CORS for the frontend origin.
 
@@ -26,6 +26,7 @@ The backend's default port is `5000`. When using a direct API origin instead of 
 - `npm test`
 
 Unit and integration tests use Vitest and React Testing Library. Run them in watch mode with `npm run test:watch`.
+Run `npm test -- --coverage` to generate a coverage report; the suite enforces at least 98% branch coverage.
 
 Test suites are grouped by feature: `src/testing/api.test.ts` covers authentication API requests and responses, `src/testing/AuthMenu.integration.test.tsx` covers login and registration flows, and `src/testing/App.test.tsx` covers movie discovery and watchlist behavior.
 

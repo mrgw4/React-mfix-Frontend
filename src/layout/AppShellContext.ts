@@ -1,12 +1,12 @@
 import { createContext, useContext, type Dispatch, type SetStateAction } from 'react'
 
-export const genres = ['All films', 'Drama', 'Mystery', 'Comedy', 'Adventure', 'Thriller', 'Romance']
-
 export type AppShellContextValue = {
   search: string
   setSearch: Dispatch<SetStateAction<string>>
-  activeGenre: string
-  setActiveGenre: Dispatch<SetStateAction<string>>
+  genres: string[]
+  genresError: string
+  activeGenres: string[]
+  setActiveGenres: Dispatch<SetStateAction<string[]>>
   sortByRating: boolean
   setSortByRating: Dispatch<SetStateAction<boolean>>
   showWatchlist: boolean
