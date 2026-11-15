@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createComment,
+  deleteComment,
   getComments,
   getGenres,
   getMovie,
@@ -317,7 +318,7 @@ describe('auth API unit tests', () => {
     ])('unwraps comments from %s', async (_description, body) => {
       stubFetch(jsonResponse(body))
       const result = await getComments('movie-1')
-      expect(result).toHaveLength(Array.isArray(body) ? 1 : 'unexpected' in body ? 0 : 1)
+      expect(result.comments).toHaveLength(Array.isArray(body) ? 1 : 'unexpected' in body ? 0 : 1)
     })
 
     it('posts a comment and normalizes a wrapped comment response', async () => {
@@ -325,13 +326,14 @@ describe('auth API unit tests', () => {
         comment: { _id: 'comment-5', name: '  Sam  ', comment: '  Wonderful  ' },
       }, 201))
 
-      await expect(createComment({ movieId: 'movie-1', name: 'Sam', text: 'Wonderful' }))
+      await expect(createComment({ movieId: 'movie-1', text: 'Wonderful' }, 'test-token'))
         .resolves.toMatchObject({ id: 'comment-5', name: '  Sam  ', text: '  Wonderful  ' })
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining('/api/comments'),
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ movie_id: 'movie-1', name: 'Sam', text: 'Wonderful' }),
+          headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ movie_id: 'movie-1', text: 'Wonderful' }),
         }),
       )
     })
@@ -339,8 +341,36 @@ describe('auth API unit tests', () => {
     it('normalizes an unwrapped comment response', async () => {
       stubFetch(jsonResponse({ id: 'comment-6', text: 'A single comment.' }))
 
-      await expect(createComment({ movieId: 'movie-1', name: 'Sam', text: 'A single comment.' }))
+      await expect(createComment({ movieId: 'movie-1', text: 'A single comment.' }, 'test-token'))
         .resolves.toMatchObject({ id: 'comment-6', text: 'A single comment.' })
+    })
+
+    it('sends pagination and owner filters when loading comments', async () => {
+      const fetchMock = stubFetch(jsonResponse({
+        comments: [{ id: 'comment-7', text: 'A paginated thought.' }],
+        pagination: { page: 2, limit: 20, total: 25, pages: 2, hasNextPage: false, hasPrevPage: true },
+      }))
+
+      await expect(getComments('movie-1', 2, 20, 'user-1')).resolves.toMatchObject({
+        comments: [{ id: 'comment-7', text: 'A paginated thought.' }],
+        pagination: { page: 2, total: 25, pages: 2, hasPrevPage: true },
+      })
+      expect(new URL(String(fetchMock.mock.calls[0][0])).search).toContain(
+        'movieId=movie-1&page=2&limit=20&userId=user-1',
+      )
+    })
+
+    it('deletes a comment with the authenticated session', async () => {
+      const fetchMock = stubFetch(jsonResponse({ message: 'Comment deleted successfully' }))
+
+      await expect(deleteComment('comment-8', 'test-token')).resolves.toBeUndefined()
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/api/comments/comment-8'),
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer test-token' },
+        }),
+      )
     })
   })
 

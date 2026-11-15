@@ -3,6 +3,7 @@ import {
   ArrowDownUp,
   Bookmark,
   Check,
+  Trash2,
   Film,
   Heart,
   MessageCircle,
@@ -16,12 +17,15 @@ import {
 } from 'lucide-react'
 import {
   createComment,
+  deleteComment,
   getComments,
+  getOwnedCommentIds,
   getMovie,
   getMovies,
   type AdvancedMovieFilters,
   type Movie,
   type MovieComment,
+  type MovieCommentPage,
   type MoviePage,
   type MovieSort,
   type MovieSortOrder,
@@ -36,7 +40,16 @@ const emptyPagination: MoviePage['pagination'] = {
   hasNextPage: false,
   hasPrevPage: false,
 }
+const emptyCommentPagination: MovieCommentPage['pagination'] = {
+  page: 1,
+  limit: 20,
+  total: 0,
+  pages: 0,
+  hasNextPage: false,
+  hasPrevPage: false,
+}
 const moviesPerPage = 30
+const commentsPerPage = 20
 type AdvancedSearchDraft = {
   [Field in Exclude<keyof AdvancedMovieFilters, 'sort' | 'order'>]: string
 }
@@ -171,16 +184,22 @@ function DiscoverPage() {
   const [reloadKey, setReloadKey] = useState(0)
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null)
   const [comments, setComments] = useState<MovieComment[]>([])
-  const [commentName, setCommentName] = useState('')
+  const [commentPagination, setCommentPagination] = useState(emptyCommentPagination)
+  const [commentPage, setCommentPage] = useState(1)
+  const [ownedCommentIds, setOwnedCommentIds] = useState<Set<string>>(() => new Set())
   const [commentText, setCommentText] = useState('')
   const [commentError, setCommentError] = useState('')
   const [commentLoading, setCommentLoading] = useState(false)
+  const [commentsLoadError, setCommentsLoadError] = useState('')
+  const [loadedCommentsKey, setLoadedCommentsKey] = useState('')
+  const [deletingCommentId, setDeletingCommentId] = useState('')
   const [advancedSearchOpen, setAdvancedSearchOpen] = useState(false)
   const [advancedSearchDraft, setAdvancedSearchDraft] = useState<AdvancedSearchDraft>(emptyAdvancedSearch)
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedMovieFilters>({})
   const [advancedSearchError, setAdvancedSearchError] = useState('')
   const [failedPosterUrls, setFailedPosterUrls] = useState<Set<string>>(() => new Set())
   const {
+    authSession,
     search,
     genres,
     genresError,
@@ -203,6 +222,10 @@ function DiscoverPage() {
     advancedFiltersKey,
   })
   const savedMoviesKey = showWatchlist ? savedMovies.join('\u001f') : ''
+  const commentsRequestKey = selectedMovie
+    ? `${selectedMovie.id}:${commentPage}:${authSession?.user.id ?? 'guest'}`
+    : ''
+  const commentsLoading = Boolean(selectedMovie && loadedCommentsKey !== commentsRequestKey)
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedSearch(search.trim()), 300)
@@ -305,17 +328,31 @@ function DiscoverPage() {
   useEffect(() => {
     if (!selectedMovie) return
     let active = true
-    getComments(selectedMovie.id)
-      .then((results) => {
-      if (active) setComments(results)
-      })
-      .catch(() => {
-        if (active) setComments([])
-      })
+    const loadComments = async () => {
+      try {
+        const [result, ownedIds] = await Promise.all([
+          getComments(selectedMovie.id, commentPage, commentsPerPage),
+          authSession ? getOwnedCommentIds(selectedMovie.id, authSession.user.id) : Promise.resolve(new Set<string>()),
+        ])
+        if (active) {
+          setComments(result.comments)
+          setCommentPagination(result.pagination)
+          setOwnedCommentIds(ownedIds)
+          setCommentsLoadError('')
+        }
+      } catch (error) {
+        if (active) {
+          setCommentsLoadError(error instanceof Error ? error.message : 'Could not load comments.')
+        }
+      } finally {
+        if (active) setLoadedCommentsKey(commentsRequestKey)
+      }
+    }
+    void loadComments()
     return () => {
       active = false
     }
-  }, [selectedMovie])
+  }, [selectedMovie, commentPage, authSession, commentsRequestKey])
 
   const filteredMovies = movies
   const featuredMovie = movies[0]
@@ -352,6 +389,8 @@ function DiscoverPage() {
   function openMovie(movie: Movie) {
     setComments([])
     setCommentError('')
+    setCommentsLoadError('')
+    setCommentPage(1)
     setSelectedMovie(movie)
   }
 
@@ -411,21 +450,55 @@ function DiscoverPage() {
 
   async function submitComment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!selectedMovie || !commentName.trim() || !commentText.trim()) return
+    if (!selectedMovie || !authSession || !commentText.trim()) return
     setCommentLoading(true)
     setCommentError('')
     try {
       const created = await createComment({
         movieId: selectedMovie.id,
-        name: commentName.trim(),
         text: commentText.trim(),
-      })
-      setComments((current) => [created, ...current])
+      }, authSession.token)
+      if (commentPage === 1) setComments((current) => [created, ...current].slice(0, commentsPerPage))
+      else setCommentPage(1)
+      setCommentPagination((current) => ({
+        ...current,
+        page: 1,
+        total: current.total + 1,
+        pages: Math.ceil((current.total + 1) / commentsPerPage),
+        hasNextPage: current.total + 1 > commentsPerPage,
+        hasPrevPage: false,
+      }))
+      setOwnedCommentIds((current) => new Set(current).add(created.id))
       setCommentText('')
     } catch (error) {
       setCommentError(error instanceof Error ? error.message : 'Could not post your comment.')
     } finally {
       setCommentLoading(false)
+    }
+  }
+
+  async function removeComment(commentId: string) {
+    if (!authSession || deletingCommentId) return
+    setDeletingCommentId(commentId)
+    setCommentError('')
+    try {
+      await deleteComment(commentId, authSession.token)
+      setComments((current) => current.filter((comment) => comment.id !== commentId))
+      setOwnedCommentIds((current) => {
+        const next = new Set(current)
+        next.delete(commentId)
+        return next
+      })
+      setCommentPagination((current) => ({
+        ...current,
+        total: Math.max(0, current.total - 1),
+        pages: Math.ceil(Math.max(0, current.total - 1) / commentsPerPage),
+      }))
+      if (comments.length === 1 && commentPage > 1) setCommentPage((current) => current - 1)
+    } catch (error) {
+      setCommentError(error instanceof Error ? error.message : 'Could not delete your comment.')
+    } finally {
+      setDeletingCommentId('')
     }
   }
 
@@ -1085,58 +1158,72 @@ function DiscoverPage() {
                   <div className="detail-section-label">AFTER THE CREDITS</div>
                   <h3>Talk about it</h3>
                 </div>
-                <span><MessageCircle size={14} /> {comments.length}</span>
+                <span><MessageCircle size={14} /> {commentPagination.total}</span>
               </div>
 
-              <form className="comment-form" onSubmit={submitComment}>
-                <input
-                  aria-label="Your name"
-                  maxLength={60}
-                  onChange={(event) => setCommentName(event.target.value)}
-                  placeholder="Your name"
-                  required
-                  value={commentName}
-                />
-                <textarea
-                  aria-label="Your comment"
-                  maxLength={1000}
-                  onChange={(event) => setCommentText(event.target.value)}
-                  placeholder="What stayed with you?"
-                  required
-                  rows={3}
-                  value={commentText}
-                />
-                {commentError && <p className="comment-error" role="alert">{commentError}</p>}
-                <button
-                  className="comment-submit"
-                  disabled={commentLoading}
-                  type="submit"
-                >
-                  {commentLoading ? 'Posting...' : 'Post comment'}
-                  <Send size={14} />
-                </button>
-              </form>
+              {authSession ? (
+                <form className="comment-form" onSubmit={submitComment}>
+                  <textarea
+                    aria-label="Your comment"
+                    maxLength={500}
+                    onChange={(event) => setCommentText(event.target.value)}
+                    placeholder="What stayed with you?"
+                    required
+                    rows={3}
+                    value={commentText}
+                  />
+                  {commentError && <p className="comment-error" role="alert">{commentError}</p>}
+                  <button
+                    className="comment-submit"
+                    disabled={commentLoading || !commentText.trim()}
+                    type="submit"
+                  >
+                    {commentLoading ? 'Posting...' : 'Post comment'}
+                    <Send size={14} />
+                  </button>
+                </form>
+              ) : (
+                <p className="comment-login-prompt">Log in from the account menu to post and manage your comments.</p>
+              )}
 
-              <div className="comment-list">
-                {comments.length ? (
-                  comments.map((comment) => (
-                    <article className="comment-item" key={comment.id}>
-                      <div className="comment-avatar">
-                        {comment.name.slice(0, 1).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="comment-author">
-                          {comment.name}
-                          <time>
-                            {comment.date
-                              ? new Date(comment.date).toLocaleDateString()
-                              : 'Just now'}
-                          </time>
+              {!commentsLoading && commentsLoadError && <p className="comment-error" role="alert">Could not load comments: {commentsLoadError}</p>}
+              <div aria-label="Movie comments" aria-live="polite" className="comment-list">
+                {commentsLoading ? (
+                  <div className="no-comments" role="status">Loading comments...</div>
+                ) : commentsLoadError ? null : comments.length ? (
+                  comments.map((comment) => {
+                    const isOwnComment = ownedCommentIds.has(comment.id)
+                    return (
+                      <article className="comment-item" key={comment.id}>
+                        <div className="comment-avatar">
+                          {comment.name.slice(0, 1).toUpperCase()}
                         </div>
-                        <p>{comment.text}</p>
-                      </div>
-                    </article>
-                  ))
+                        <div className="comment-content">
+                          <div className="comment-author">
+                            {comment.name}
+                            {isOwnComment && <span className="comment-owner">YOU</span>}
+                            <time>
+                              {comment.date
+                                ? new Date(comment.date).toLocaleDateString()
+                                : 'Just now'}
+                            </time>
+                          </div>
+                          <p>{comment.text}</p>
+                        </div>
+                        {isOwnComment && (
+                          <button
+                            aria-label={`Delete comment by ${comment.name}`}
+                            className="comment-delete"
+                            disabled={deletingCommentId !== ''}
+                            onClick={() => void removeComment(comment.id)}
+                            type="button"
+                          >
+                            {deletingCommentId === comment.id ? 'Deleting...' : <><Trash2 size={14} /> Delete</>}
+                          </button>
+                        )}
+                      </article>
+                    )
+                  })
                 ) : (
                   <div className="no-comments">
                     <Heart size={17} />
@@ -1144,6 +1231,25 @@ function DiscoverPage() {
                   </div>
                 )}
               </div>
+              {commentPagination.pages > 1 && (
+                <nav aria-label="Comment pages" className="comment-pagination">
+                  <button
+                    disabled={!commentPagination.hasPrevPage || commentsLoading}
+                    onClick={() => setCommentPage((current) => current - 1)}
+                    type="button"
+                  >
+                    Previous
+                  </button>
+                  <span>Page {commentPagination.page} of {commentPagination.pages}</span>
+                  <button
+                    disabled={!commentPagination.hasNextPage || commentsLoading}
+                    onClick={() => setCommentPage((current) => current + 1)}
+                    type="button"
+                  >
+                    Next
+                  </button>
+                </nav>
+              )}
             </div>
           </div>
         </section>

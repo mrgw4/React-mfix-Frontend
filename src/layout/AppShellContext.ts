@@ -1,6 +1,8 @@
 import { createContext, useContext, type Dispatch, type SetStateAction } from 'react'
+import type { AuthSession } from '../api'
 
 export type AppShellContextValue = {
+  authSession: AuthSession | null
   search: string
   setSearch: Dispatch<SetStateAction<string>>
   genres: string[]

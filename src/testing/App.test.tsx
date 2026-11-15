@@ -24,6 +24,10 @@ const movieResponse = {
   pagination: { page: 1, limit: 30, total: 1, pages: 1, hasNextPage: false, hasPrevPage: false },
 }
 const genresResponse = { genres: ['Drama', 'Mystery', 'Documentary'] }
+const authSession = {
+  token: 'test-token',
+  user: { id: 'user-1', name: 'A Fan', email: 'fan@example.com' },
+}
 
 describe('movie discovery integration', () => {
   beforeEach(() => {
@@ -647,6 +651,7 @@ describe('movie discovery integration', () => {
   })
 
   it('opens film details, loads comments, posts a comment, and closes from the backdrop', async () => {
+    window.localStorage.setItem('mosaic.auth.v1', JSON.stringify(authSession))
     const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input))
       if (url.pathname.endsWith('/genres')) return { ok: true, json: async () => genresResponse }
@@ -658,6 +663,7 @@ describe('movie discovery integration', () => {
         }
       }
       if (url.pathname === '/api/comments') {
+        if (url.searchParams.has('userId')) return { ok: true, json: async () => ({ comments: [] }) }
         return { ok: true, json: async () => ({ comments: [{ _id: 'comment-old', name: 'Lee', text: 'Great!', date: '2025-01-01' }] }) }
       }
       return { ok: true, json: async () => movieResponse.data[0] }
@@ -674,7 +680,6 @@ describe('movie discovery integration', () => {
     expect(within(dialog).getByText('4.4/5 · 25,000 ratings')).toBeVisible()
     expect(within(dialog).getByText('87% · 150 reviews')).toBeVisible()
     expect(await within(dialog).findByText('Great!')).toBeVisible()
-    await user.type(within(dialog).getByLabelText('Your name'), 'A Fan')
     await user.type(within(dialog).getByLabelText('Your comment'), 'Loved it.')
     await user.click(within(dialog).getByRole('button', { name: 'Post comment' }))
 
@@ -683,11 +688,118 @@ describe('movie discovery integration', () => {
       expect.stringContaining('/api/comments'),
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ movie_id: 'movie-123', name: 'A Fan', text: 'Loved it.' }),
+        headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ movie_id: 'movie-123', text: 'Loved it.' }),
       }),
     )
     fireEvent.mouseDown(screen.getByRole('dialog').parentElement!)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('lets guests read movie comments but not post or delete comments', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      if (url.pathname.endsWith('/genres')) return { ok: true, json: async () => genresResponse }
+      if (url.pathname === '/api/movies') return { ok: true, json: async () => movieResponse }
+      if (url.pathname === '/api/comments') {
+        return { ok: true, json: async () => ({ comments: [{ id: 'public-comment', name: 'Lee', text: 'A public thought.' }] }) }
+      }
+      return { ok: true, json: async () => movieResponse.data[0] }
+    }))
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'View The Quiet Between' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByText('A public thought.')).toBeVisible()
+    expect(within(dialog).getByText(/Log in from the account menu/)).toBeVisible()
+    expect(within(dialog).queryByLabelText('Your comment')).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: /Delete comment/ })).not.toBeInTheDocument()
+  })
+
+  it('paginates long movie comment lists without rendering every comment at once', async () => {
+    const firstPage = Array.from({ length: 20 }, (_, index) => ({
+      id: `page-one-${index}`,
+      name: 'Viewer',
+      text: `First page comment ${index + 1}`,
+    }))
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      if (url.pathname.endsWith('/genres')) return { ok: true, json: async () => genresResponse }
+      if (url.pathname === '/api/movies') return { ok: true, json: async () => movieResponse }
+      if (url.pathname === '/api/comments') {
+        return {
+          ok: true,
+          json: async () => url.searchParams.get('page') === '2'
+            ? {
+              comments: [{ id: 'page-two-1', name: 'Viewer', text: 'Second page comment' }],
+              pagination: { page: 2, limit: 20, total: 21, pages: 2, hasNextPage: false, hasPrevPage: true },
+            }
+            : {
+              comments: firstPage,
+              pagination: { page: 1, limit: 20, total: 21, pages: 2, hasNextPage: true, hasPrevPage: false },
+            },
+        }
+      }
+      return { ok: true, json: async () => movieResponse.data[0] }
+    }))
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'View The Quiet Between' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByText('First page comment 1')).toBeVisible()
+    expect(within(dialog).queryByText('Second page comment')).not.toBeInTheDocument()
+    expect(within(dialog).getByText('21')).toBeVisible()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Next' }))
+
+    expect(await within(dialog).findByText('Second page comment')).toBeVisible()
+    expect(within(dialog).queryByText('First page comment 1')).not.toBeInTheDocument()
+    expect(within(dialog).getByText('Page 2 of 2')).toBeVisible()
+  })
+
+  it('allows a signed-in user to delete their own comment only', async () => {
+    window.localStorage.setItem('mosaic.auth.v1', JSON.stringify(authSession))
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input))
+      if (url.pathname.endsWith('/genres')) return { ok: true, json: async () => genresResponse }
+      if (url.pathname === '/api/movies') return { ok: true, json: async () => movieResponse }
+      if (url.pathname.startsWith('/api/comments/') && init?.method === 'DELETE') {
+        return { ok: true, json: async () => ({ message: 'Comment deleted successfully' }) }
+      }
+      if (url.pathname === '/api/comments' && url.searchParams.has('userId')) {
+        return { ok: true, json: async () => ({ comments: [{ id: 'own-comment', name: 'A Fan', text: 'Mine.' }] }) }
+      }
+      if (url.pathname === '/api/comments') {
+        return { ok: true, json: async () => ({ comments: [
+          { id: 'own-comment', name: 'A Fan', text: 'Mine.' },
+          { id: 'other-comment', name: 'Lee', text: 'Not mine.' },
+        ] }) }
+      }
+      return { ok: true, json: async () => movieResponse.data[0] }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'View The Quiet Between' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByText('Mine.')).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Delete comment by A Fan' })).toBeVisible()
+    expect(within(dialog).queryByRole('button', { name: 'Delete comment by Lee' })).not.toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Delete comment by A Fan' }))
+
+    await waitFor(() => expect(within(dialog).queryByText('Mine.')).not.toBeInTheDocument())
+    expect(within(dialog).getByText('Not mine.')).toBeVisible()
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/comments/own-comment'),
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer test-token' },
+      }),
+    )
   })
 
   it('does not apply comments from a closed film to the next film opened', async () => {
@@ -732,6 +844,7 @@ describe('movie discovery integration', () => {
   })
 
   it('shows the comment loading state while the post request is pending', async () => {
+    window.localStorage.setItem('mosaic.auth.v1', JSON.stringify(authSession))
     let resolveComment!: (response: { ok: boolean; json: () => Promise<unknown> }) => void
     const pendingComment = new Promise<{ ok: boolean; json: () => Promise<unknown> }>((resolve) => {
       resolveComment = resolve
@@ -749,7 +862,6 @@ describe('movie discovery integration', () => {
 
     await user.click(await screen.findByRole('button', { name: 'The Quiet Between' }))
     const dialog = await screen.findByRole('dialog')
-    await user.type(within(dialog).getByLabelText('Your name'), 'Fan')
     await user.type(within(dialog).getByLabelText('Your comment'), 'A thought')
     await user.click(within(dialog).getByRole('button', { name: 'Post comment' }))
 
@@ -881,6 +993,7 @@ describe('movie discovery integration', () => {
   })
 
   it('shows a comment posting error and handles missing detail fields', async () => {
+    window.localStorage.setItem('mosaic.auth.v1', JSON.stringify(authSession))
     const minimalMovie = {
       _id: 'minimal-movie',
       title: 'Untitled Test',
@@ -915,13 +1028,13 @@ describe('movie discovery integration', () => {
     expect(within(dialog).getByText('No synopsis is available for this film yet.')).toBeVisible()
     expect(within(dialog).getAllByText('Not listed')).toHaveLength(3)
     expect(within(dialog).getByText('Feature film')).toBeVisible()
-    await user.type(within(dialog).getByLabelText('Your name'), 'Fan')
     await user.type(within(dialog).getByLabelText('Your comment'), 'A thought')
     await user.click(within(dialog).getByRole('button', { name: 'Post comment' }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Could not post your comment.')
   })
 
   it('displays comment API errors while details remain open', async () => {
+    window.localStorage.setItem('mosaic.auth.v1', JSON.stringify(authSession))
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input))
       if (url.pathname.endsWith('/genres')) return { ok: true, json: async () => genresResponse }
@@ -939,10 +1052,9 @@ describe('movie discovery integration', () => {
     fireEvent.submit(dialog.querySelector('form')!)
     expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument()
 
-    await user.type(within(dialog).getByLabelText('Your name'), 'Fan')
     await user.type(within(dialog).getByLabelText('Your comment'), 'A thought')
     await user.click(within(dialog).getByRole('button', { name: 'Post comment' }))
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Request failed (500).')
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Comment unavailable')
   })
 
   it('displays a comments loading failure while the detail dialog is open', async () => {
@@ -958,7 +1070,7 @@ describe('movie discovery integration', () => {
 
     await user.click(await screen.findByRole('button', { name: 'View The Quiet Between' }))
     const dialog = await screen.findByRole('dialog')
-    expect(await within(dialog).findByText('Be the first to leave a thought.')).toBeVisible()
+    expect(await within(dialog).findByText(/Could not load comments:/)).toBeVisible()
   })
 
   it('does not update movie state after a pending catalog request is cancelled', async () => {

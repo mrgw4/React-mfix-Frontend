@@ -501,6 +501,7 @@ export default function AppLayout() {
   }
 
   const shellContext: AppShellContextValue = {
+    authSession,
     search,
     setSearch,
     genres,

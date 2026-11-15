@@ -90,7 +90,18 @@ export type MovieSort = NonNullable<MovieQuery['sort']>
 export type MovieSortOrder = NonNullable<MovieQuery['order']>
 
 export type MovieComment = { id: string; name: string; text: string; date: string }
-type CommentInput = { movieId: string; name: string; text: string }
+export type MovieCommentPage = {
+  comments: MovieComment[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    pages: number
+    hasNextPage: boolean
+    hasPrevPage: boolean
+  }
+}
+type CommentInput = { movieId: string; text: string }
 export type AuthUser = { id: string; name: string; email: string }
 export type AuthSession = { token: string; user: AuthUser }
 
@@ -270,15 +281,61 @@ export async function getGenres(): Promise<string[]> {
     .sort((first, second) => first.localeCompare(second))
 }
 
-export async function getComments(movieId: string): Promise<MovieComment[]> {
-  const payload = await request<unknown>(endpointUrl(commentsEndpoint, { movieId }))
-  return unwrapList(payload).map(normalizeComment)
+export async function getComments(
+  movieId: string,
+  page = 1,
+  limit = 20,
+  userId?: string,
+): Promise<MovieCommentPage> {
+  const query: Record<string, string> = { movieId, page: String(page), limit: String(limit) }
+  if (userId) query.userId = userId
+  const payload = await request<unknown>(endpointUrl(commentsEndpoint, query))
+  const comments = unwrapList(payload).map(normalizeComment)
+  const pagination = asRecord(asRecord(payload).pagination)
+
+  return {
+    comments,
+    pagination: {
+      page: typeof pagination.page === 'number' ? pagination.page : page,
+      limit: typeof pagination.limit === 'number' ? pagination.limit : limit,
+      total: typeof pagination.total === 'number' ? pagination.total : comments.length,
+      pages: typeof pagination.pages === 'number' ? pagination.pages : comments.length ? 1 : 0,
+      hasNextPage: typeof pagination.hasNextPage === 'boolean' ? pagination.hasNextPage : false,
+      hasPrevPage: typeof pagination.hasPrevPage === 'boolean' ? pagination.hasPrevPage : false,
+    },
+  }
 }
 
-export async function createComment(input: CommentInput): Promise<MovieComment> {
-  const payload = await request<unknown>(endpointUrl(commentsEndpoint), { method: 'POST', body: JSON.stringify({ movie_id: input.movieId, name: input.name, text: input.text }) })
+export async function getOwnedCommentIds(movieId: string, userId: string): Promise<Set<string>> {
+  const ownedCommentIds = new Set<string>()
+  let page = 1
+  let hasNextPage = true
+
+  while (hasNextPage) {
+    const result = await getComments(movieId, page, 100, userId)
+    result.comments.forEach((comment) => ownedCommentIds.add(comment.id))
+    hasNextPage = result.pagination.hasNextPage
+    page += 1
+  }
+
+  return ownedCommentIds
+}
+
+export async function createComment(input: CommentInput, token: string): Promise<MovieComment> {
+  const payload = await authRequest<unknown>(commentsEndpoint, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ movie_id: input.movieId, text: input.text }),
+  })
   const record = asRecord(payload)
   return normalizeComment(record.comment ?? record, Date.now())
+}
+
+export async function deleteComment(commentId: string, token: string): Promise<void> {
+  await authRequest<unknown>(`${commentsEndpoint.replace(/\/$/, '')}/${encodeURIComponent(commentId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
 }
 
 export async function login(email: string, password: string): Promise<AuthSession> {
