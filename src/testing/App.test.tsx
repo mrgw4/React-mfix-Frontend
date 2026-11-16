@@ -8,6 +8,7 @@ const movieResponse = {
   data: [{
     _id: 'movie-123',
     title: 'The Quiet Between',
+    num_mflix_comments: 3,
     year: 2025,
     genres: ['Drama', 'Mystery'],
     imdb: { rating: 8.7 },
@@ -78,10 +79,33 @@ describe('movie discovery integration', () => {
 
     expect(await screen.findByRole('button', { name: 'The Quiet Between' })).toBeVisible()
     expect(screen.getByText('RT 92%')).toBeVisible()
+    expect(await screen.findByLabelText('3 comments for The Quiet Between')).toBeVisible()
     expect(screen.getAllByRole('button', { name: 'Documentary' }).length).toBeGreaterThan(0)
     expect(screen.getByText('Connected to your collection')).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/movies?'), expect.objectContaining({}))
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/movies/genres'), expect.objectContaining({}))
+  })
+
+  it('uses the movie comment total without making a separate count request', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      if (url.pathname.endsWith('/genres')) return { ok: true, json: async () => genresResponse }
+      if (url.pathname === '/api/movies') {
+        return {
+          ok: true,
+          json: async () => ({
+            ...movieResponse,
+            data: [{ ...movieResponse.data[0], num_mflix_comments: 7 }],
+          }),
+        }
+      }
+      return { ok: true, json: async () => movieResponse.data[0] }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+
+    expect(await screen.findByLabelText('7 comments for The Quiet Between')).toBeVisible()
+    expect(fetchMock.mock.calls.some(([input]) => new URL(String(input)).pathname === '/api/comments')).toBe(false)
   })
 
   it('requests a selected genre from the backend, including genres outside the first page', async () => {
@@ -684,6 +708,7 @@ describe('movie discovery integration', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Post comment' }))
 
     expect(await within(dialog).findByText('Loved it.')).toBeVisible()
+    expect(await screen.findByLabelText('4 comments for The Quiet Between')).toBeVisible()
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/api/comments'),
       expect.objectContaining({

@@ -41,6 +41,7 @@ describe('auth API unit tests', () => {
           _id: 'movie-1',
           title: 'A Movie',
           year: 2000,
+          num_mflix_comments: 8,
           genres: ['Drama'],
           imdb: { rating: 7.5 },
           runtime: 90,
@@ -66,6 +67,7 @@ describe('auth API unit tests', () => {
         movies: [{
           id: 'movie-1',
           title: 'A Movie',
+          commentCount: 8,
           year: 2000,
           genres: ['Drama'],
           rating: 7.5,

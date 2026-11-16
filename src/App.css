@@ -1252,6 +1252,21 @@
   white-space: nowrap;
 }
 
+.poster-comment-count {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  color: #fff;
+  background: rgba(19, 36, 27, .86);
+  border-radius: 3px;
+  font: 10px 'DM Mono', monospace;
+  white-space: nowrap;
+}
+
 .movie-info {
   padding: 8px 1px 0;
 }

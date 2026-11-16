@@ -468,6 +468,9 @@ function DiscoverPage() {
         hasNextPage: current.total + 1 > commentsPerPage,
         hasPrevPage: false,
       }))
+      setMovies((current) => current.map((movie) => movie.id === selectedMovie.id
+        ? { ...movie, commentCount: (movie.commentCount ?? commentPagination.total) + 1 }
+        : movie))
       setOwnedCommentIds((current) => new Set(current).add(created.id))
       setCommentText('')
     } catch (error) {
@@ -478,7 +481,7 @@ function DiscoverPage() {
   }
 
   async function removeComment(commentId: string) {
-    if (!authSession || deletingCommentId) return
+    if (!authSession || !selectedMovie || deletingCommentId) return
     setDeletingCommentId(commentId)
     setCommentError('')
     try {
@@ -494,6 +497,9 @@ function DiscoverPage() {
         total: Math.max(0, current.total - 1),
         pages: Math.ceil(Math.max(0, current.total - 1) / commentsPerPage),
       }))
+      setMovies((current) => current.map((movie) => movie.id === selectedMovie.id
+        ? { ...movie, commentCount: Math.max(0, (movie.commentCount ?? commentPagination.total) - 1) }
+        : movie))
       if (comments.length === 1 && commentPage > 1) setCommentPage((current) => current - 1)
     } catch (error) {
       setCommentError(error instanceof Error ? error.message : 'Could not delete your comment.')
@@ -950,6 +956,15 @@ function DiscoverPage() {
                     <span className="poster-rating">
                       <Star size={12} fill="currentColor" />
                       {movie.rating.toFixed(1)}
+                    </span>
+                    <span
+                      aria-label={movie.commentCount === null
+                        ? `Comment count unavailable for ${movie.title}`
+                        : `${movie.commentCount} comments for ${movie.title}`}
+                      className="poster-comment-count"
+                    >
+                      <MessageCircle size={12} />
+                      {movie.commentCount ?? '—'}
                     </span>
                   </button>
 

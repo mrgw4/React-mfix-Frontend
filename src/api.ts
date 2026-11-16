@@ -1,6 +1,7 @@
 export type Movie = {
   id: string
   title: string
+  commentCount: number | null
   year: number
   genres: string[]
   rating: number
@@ -174,6 +175,7 @@ function normalizeMovie(value: unknown, index: number): Movie {
   return {
     id: asString(movie._id ?? movie.id, `movie-${index}`),
     title: asString(movie.title, 'Untitled film'),
+    commentCount: asOptionalNumber(movie.num_mflix_comments),
     year: Number(movie.year) || 0,
     genres: asStringArray(movie.genres ?? movie.genre),
     rating: Number(imdb.rating ?? movie.rating ?? movie.vote_average) || 0,
