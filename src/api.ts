@@ -105,6 +105,15 @@ export type MovieCommentPage = {
 type CommentInput = { movieId: string; text: string }
 export type AuthUser = { id: string; name: string; email: string }
 export type AuthSession = { token: string; user: AuthUser }
+export const sessionExpiredEventName = 'mosaic:session-expired'
+export const sessionExpiredMessage = 'Your session has expired or is no longer valid. Please sign in again.'
+
+export class SessionExpiredError extends Error {
+  constructor() {
+    super(sessionExpiredMessage)
+    this.name = 'SessionExpiredError'
+  }
+}
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 const moviesEndpoint = import.meta.env.VITE_MOVIES_ENDPOINT ?? '/api/movies'
@@ -134,8 +143,12 @@ async function authRequest<T>(endpoint: string, init: RequestInit, unauthorizedM
     if (response.ok) throw new Error('The server returned an invalid response.')
   }
   if (!response.ok) {
-    if (response.status === 401 && unauthorizedMessage) throw new Error(unauthorizedMessage)
     const message = asRecord(payload).error
+    if (response.status === 401 && new Headers(headers).has('Authorization')) {
+      window.dispatchEvent(new Event(sessionExpiredEventName))
+      throw new SessionExpiredError()
+    }
+    if (response.status === 401 && unauthorizedMessage) throw new Error(unauthorizedMessage)
     throw new Error(typeof message === 'string' ? message : `Request failed (${response.status}).`)
   }
   return payload as T
@@ -338,6 +351,16 @@ export async function deleteComment(commentId: string, token: string): Promise<v
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   })
+}
+
+export async function updateComment(commentId: string, text: string, token: string): Promise<MovieComment> {
+  const payload = await authRequest<unknown>(`${commentsEndpoint.replace(/\/$/, '')}/${encodeURIComponent(commentId)}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ text }),
+  })
+  const record = asRecord(payload)
+  return normalizeComment(record.comment ?? record, Date.now())
 }
 
 export async function login(email: string, password: string): Promise<AuthSession> {

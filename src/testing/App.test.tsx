@@ -721,6 +721,34 @@ describe('movie discovery integration', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('clears an expired session and prompts the user to sign in again', async () => {
+    window.localStorage.setItem('mosaic.auth.v1', JSON.stringify(authSession))
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input))
+      if (url.pathname.endsWith('/genres')) return { ok: true, json: async () => genresResponse }
+      if (url.pathname === '/api/movies') return { ok: true, json: async () => movieResponse }
+      if (url.pathname === '/api/comments' && init?.method === 'POST') {
+        return { ok: false, status: 401, json: async () => ({ error: 'Invalid token' }) }
+      }
+      if (url.pathname === '/api/comments') return { ok: true, json: async () => ({ comments: [] }) }
+      return { ok: true, json: async () => movieResponse.data[0] }
+    }))
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'View The Quiet Between' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Your comment'), 'A thought')
+    await user.click(within(dialog).getByRole('button', { name: 'Post comment' }))
+
+    expect(await screen.findByRole('button', { name: 'Open login menu' })).toBeVisible()
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Your session has expired or is no longer valid. Please sign in again.',
+    )
+    expect(window.localStorage.getItem('mosaic.auth.v1')).toBeNull()
+    expect(within(dialog).getByText(/Log in from the account menu/)).toBeVisible()
+  })
+
   it('lets guests read movie comments but not post or delete comments', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
       const url = new URL(String(input))
@@ -782,6 +810,53 @@ describe('movie discovery integration', () => {
     expect(await within(dialog).findByText('Second page comment')).toBeVisible()
     expect(within(dialog).queryByText('First page comment 1')).not.toBeInTheDocument()
     expect(within(dialog).getByText('Page 2 of 2')).toBeVisible()
+  })
+
+  it('allows a signed-in user to edit their own comment only', async () => {
+    window.localStorage.setItem('mosaic.auth.v1', JSON.stringify(authSession))
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input))
+      if (url.pathname.endsWith('/genres')) return { ok: true, json: async () => genresResponse }
+      if (url.pathname === '/api/movies') return { ok: true, json: async () => movieResponse }
+      if (url.pathname === '/api/comments/own-comment' && init?.method === 'PUT') {
+        return { ok: true, json: async () => ({ id: 'own-comment', name: 'A Fan', text: 'Updated mine.' }) }
+      }
+      if (url.pathname === '/api/comments' && url.searchParams.has('userId')) {
+        return { ok: true, json: async () => ({ comments: [{ id: 'own-comment', name: 'A Fan', text: 'Mine.' }] }) }
+      }
+      if (url.pathname === '/api/comments') {
+        return { ok: true, json: async () => ({ comments: [
+          { id: 'own-comment', name: 'A Fan', text: 'Mine.' },
+          { id: 'other-comment', name: 'Lee', text: 'Not mine.' },
+        ] }) }
+      }
+      return { ok: true, json: async () => movieResponse.data[0] }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'View The Quiet Between' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByText('Mine.')).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Edit comment by A Fan' })).toBeVisible()
+    expect(within(dialog).queryByRole('button', { name: 'Edit comment by Lee' })).not.toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Edit comment by A Fan' }))
+    const editor = within(dialog).getByLabelText('Edit comment by A Fan')
+    await user.clear(editor)
+    await user.type(editor, 'Updated mine.')
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    expect(await within(dialog).findByText('Updated mine.')).toBeVisible()
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/comments/own-comment'),
+      expect.objectContaining({
+        method: 'PUT',
+        headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'Updated mine.' }),
+      }),
+    )
   })
 
   it('allows a signed-in user to delete their own comment only', async () => {

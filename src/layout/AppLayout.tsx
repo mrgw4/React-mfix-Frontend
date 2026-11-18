@@ -1,7 +1,15 @@
-import { useEffect, useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react'
+import { useCallback, useEffect, useRef, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Bookmark, Clapperboard, Film, LogIn, Search, Sparkles } from 'lucide-react'
-import { getGenres, login, logout, register, type AuthSession } from '../api'
+import {
+  getGenres,
+  login,
+  logout,
+  register,
+  sessionExpiredEventName,
+  sessionExpiredMessage,
+  type AuthSession,
+} from '../api'
 import { AppShellContext, type AppShellContextValue } from './AppShellContext'
 import '../App.css'
 
@@ -160,11 +168,20 @@ function AppSidebar({
   )
 }
 
-function AppTopbar({ search, setSearch, authSession, onAuthSessionChange }: {
+function AppTopbar({
+  search,
+  setSearch,
+  authSession,
+  onAuthSessionChange,
+  sessionExpiredNotice,
+  onSessionExpiredNoticeDismiss,
+}: {
   search: string
   setSearch: Dispatch<SetStateAction<string>>
   authSession: AuthSession | null
   onAuthSessionChange: (session: AuthSession | null) => void
+  sessionExpiredNotice: string
+  onSessionExpiredNoticeDismiss: () => void
 }) {
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -177,14 +194,19 @@ function AppTopbar({ search, setSearch, authSession, onAuthSessionChange }: {
   const [successMessage, setSuccessMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const accountMenuOpen = menuOpen || Boolean(sessionExpiredNotice)
+  const activeAuthView = sessionExpiredNotice ? 'login' : authView
+  const displayedError = sessionExpiredNotice || error
 
   useEffect(() => {
-    if (!menuOpen) return
+    if (!accountMenuOpen) return
     function closeMenu(event: MouseEvent | KeyboardEvent) {
       if (event instanceof KeyboardEvent && event.key === 'Escape') {
         setMenuOpen(false)
+        onSessionExpiredNoticeDismiss()
       } else if (event instanceof MouseEvent && !menuRef.current?.contains(event.target as Node)) {
         setMenuOpen(false)
+        onSessionExpiredNoticeDismiss()
       }
     }
     document.addEventListener('mousedown', closeMenu)
@@ -193,7 +215,7 @@ function AppTopbar({ search, setSearch, authSession, onAuthSessionChange }: {
       document.removeEventListener('mousedown', closeMenu)
       document.removeEventListener('keydown', closeMenu)
     }
-  }, [menuOpen])
+  }, [accountMenuOpen, onSessionExpiredNoticeDismiss])
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -274,6 +296,7 @@ function AppTopbar({ search, setSearch, authSession, onAuthSessionChange }: {
       : 'Page'
 
   function resetAuthForm(view: 'login' | 'register') {
+    onSessionExpiredNoticeDismiss()
     setAuthView(view)
     setPassword('')
     setError('')
@@ -302,13 +325,18 @@ function AppTopbar({ search, setSearch, authSession, onAuthSessionChange }: {
       <div className="account-menu" ref={menuRef}>
         <button
           aria-controls="account-dropdown"
-          aria-expanded={menuOpen}
+          aria-expanded={accountMenuOpen}
           aria-label={authSession
             ? `Account menu for ${authSession.user.name}`
             : 'Open login menu'}
           className="avatar-small"
           onClick={() => {
-            setMenuOpen((open) => !open)
+            if (sessionExpiredNotice) {
+              onSessionExpiredNoticeDismiss()
+              setMenuOpen(false)
+            } else {
+              setMenuOpen((open) => !open)
+            }
             setError('')
           }}
           type="button"
@@ -318,7 +346,7 @@ function AppTopbar({ search, setSearch, authSession, onAuthSessionChange }: {
             : <LogIn aria-hidden="true" size={17} />}
         </button>
 
-        {menuOpen && (
+        {accountMenuOpen && (
           <section
             aria-label="Account menu"
             className="account-dropdown"
@@ -330,7 +358,7 @@ function AppTopbar({ search, setSearch, authSession, onAuthSessionChange }: {
                   <strong>{authSession.user.name}</strong>
                   <span>{authSession.user.email}</span>
                 </div>
-                {error && <p className="auth-error" role="alert">{error}</p>}
+                {displayedError && <p className="auth-error" role="alert">{displayedError}</p>}
                 <button
                   className="account-action"
                   disabled={loading}
@@ -340,13 +368,13 @@ function AppTopbar({ search, setSearch, authSession, onAuthSessionChange }: {
                   {loading ? 'Signing out…' : 'Log out'}
                 </button>
               </>
-            ) : authView === 'register' ? (
+            ) : activeAuthView === 'register' ? (
               <form className="account-form" onSubmit={submitRegistration}>
                 <div className="account-heading">
                   <strong>Create an account</strong>
                   <span>Join Mosaic to save your favorites</span>
                 </div>
-                {error && <p className="auth-error" role="alert">{error}</p>}
+                {displayedError && <p className="auth-error" role="alert">{displayedError}</p>}
                 <label>
                   Username
                   <input
@@ -414,7 +442,7 @@ function AppTopbar({ search, setSearch, authSession, onAuthSessionChange }: {
                   <strong>Welcome back</strong>
                   <span>Sign in to your account</span>
                 </div>
-                {error && <p className="auth-error" role="alert">{error}</p>}
+                {displayedError && <p className="auth-error" role="alert">{displayedError}</p>}
                 <label>
                   Email
                   <input
@@ -465,6 +493,8 @@ export default function AppLayout() {
   const [showWatchlist, setShowWatchlist] = useState(false)
   const [authSession, setAuthSession] = useState<AuthSession | null>(getSavedAuthSession)
   const [savedMovies, setSavedMovies] = useState<string[]>(() => getSavedMovieIds(authSession?.user.id ?? null))
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState('')
+  const dismissSessionExpiredNotice = useCallback(() => setSessionExpiredNotice(''), [])
 
   useEffect(() => {
     let active = true
@@ -489,6 +519,22 @@ export default function AppLayout() {
     }
   }, [authSession, savedMovies])
 
+  useEffect(() => {
+    function handleSessionExpired() {
+      setAuthSession(null)
+      setSavedMovies(getSavedMovieIds(null))
+      try {
+        window.localStorage.removeItem(authStorageKey)
+        setSessionExpiredNotice(sessionExpiredMessage)
+      } catch {
+        setSessionExpiredNotice(`${sessionExpiredMessage} This browser could not clear the saved session.`)
+      }
+    }
+
+    window.addEventListener(sessionExpiredEventName, handleSessionExpired)
+    return () => window.removeEventListener(sessionExpiredEventName, handleSessionExpired)
+  }, [])
+
   function toggleSaved(movieId: string) {
     setSavedMovies((current) => current.includes(movieId)
       ? current.filter((id) => id !== movieId)
@@ -498,6 +544,7 @@ export default function AppLayout() {
   function changeAuthSession(session: AuthSession | null) {
     setSavedMovies(getSavedMovieIds(session?.user.id ?? null))
     setAuthSession(session)
+    setSessionExpiredNotice('')
   }
 
   const shellContext: AppShellContextValue = {
@@ -534,6 +581,8 @@ export default function AppLayout() {
             onAuthSessionChange={changeAuthSession}
             search={search}
             setSearch={setSearch}
+            sessionExpiredNotice={sessionExpiredNotice}
+            onSessionExpiredNoticeDismiss={dismissSessionExpiredNotice}
           />
           <Outlet />
         </main>

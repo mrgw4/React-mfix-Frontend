@@ -7,6 +7,7 @@ import {
   Film,
   Heart,
   MessageCircle,
+  Pencil,
   Play,
   Search,
   Send,
@@ -22,6 +23,7 @@ import {
   getOwnedCommentIds,
   getMovie,
   getMovies,
+  updateComment,
   type AdvancedMovieFilters,
   type Movie,
   type MovieComment,
@@ -193,6 +195,9 @@ function DiscoverPage() {
   const [commentsLoadError, setCommentsLoadError] = useState('')
   const [loadedCommentsKey, setLoadedCommentsKey] = useState('')
   const [deletingCommentId, setDeletingCommentId] = useState('')
+  const [editingCommentId, setEditingCommentId] = useState('')
+  const [editingCommentText, setEditingCommentText] = useState('')
+  const [savingCommentId, setSavingCommentId] = useState('')
   const [advancedSearchOpen, setAdvancedSearchOpen] = useState(false)
   const [advancedSearchDraft, setAdvancedSearchDraft] = useState<AdvancedSearchDraft>(emptyAdvancedSearch)
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedMovieFilters>({})
@@ -505,6 +510,34 @@ function DiscoverPage() {
       setCommentError(error instanceof Error ? error.message : 'Could not delete your comment.')
     } finally {
       setDeletingCommentId('')
+    }
+  }
+
+  function startEditingComment(comment: MovieComment) {
+    setEditingCommentId(comment.id)
+    setEditingCommentText(comment.text)
+    setCommentError('')
+  }
+
+  function cancelEditingComment() {
+    setEditingCommentId('')
+    setEditingCommentText('')
+  }
+
+  async function saveComment(commentId: string) {
+    if (!authSession || !editingCommentText.trim() || savingCommentId) return
+    setSavingCommentId(commentId)
+    setCommentError('')
+    try {
+      const updated = await updateComment(commentId, editingCommentText.trim(), authSession.token)
+      setComments((current) => current.map((comment) => comment.id === commentId
+        ? { ...comment, ...updated, id: comment.id }
+        : comment))
+      cancelEditingComment()
+    } catch (error) {
+      setCommentError(error instanceof Error ? error.message : 'Could not edit your comment.')
+    } finally {
+      setSavingCommentId('')
     }
   }
 
@@ -1223,18 +1256,67 @@ function DiscoverPage() {
                                 : 'Just now'}
                             </time>
                           </div>
-                          <p>{comment.text}</p>
+                          {editingCommentId === comment.id ? (
+                            <form
+                              className="comment-edit-form"
+                              onSubmit={(event) => {
+                                                event.preventDefault()
+                                void saveComment(comment.id)
+                              }}
+                            >
+                              <textarea
+                                aria-label={`Edit comment by ${comment.name}`}
+                                maxLength={500}
+                                onChange={(event) => setEditingCommentText(event.target.value)}
+                                required
+                                rows={3}
+                                value={editingCommentText}
+                              />
+                              <div className="comment-edit-actions">
+                                <button
+                                  className="comment-edit-cancel"
+                                  onClick={cancelEditingComment}
+                                  type="button"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  className="comment-edit-save"
+                                  disabled={!editingCommentText.trim() || savingCommentId !== ''}
+                                  type="submit"
+                                >
+                                  {savingCommentId === comment.id ? 'Saving...' : 'Save'}
+                                </button>
+                              </div>
+                            </form>
+                          ) : (
+                            <p>{comment.text}</p>
+                          )}
                         </div>
                         {isOwnComment && (
-                          <button
-                            aria-label={`Delete comment by ${comment.name}`}
-                            className="comment-delete"
-                            disabled={deletingCommentId !== ''}
-                            onClick={() => void removeComment(comment.id)}
-                            type="button"
-                          >
-                            {deletingCommentId === comment.id ? 'Deleting...' : <><Trash2 size={14} /> Delete</>}
-                          </button>
+                          <div className="comment-actions">
+                            {editingCommentId !== comment.id && (
+                              <button
+                                aria-label={`Edit comment by ${comment.name}`}
+                                className="comment-edit"
+                                disabled={deletingCommentId !== '' || savingCommentId !== ''}
+                                onClick={() => startEditingComment(comment)}
+                                type="button"
+                              >
+                                <Pencil size={14} />
+                                Edit
+                              </button>
+                            )}
+                            <button
+                              aria-label={`Delete comment by ${comment.name}`}
+                              className="comment-delete"
+                              disabled={deletingCommentId !== '' || savingCommentId !== ''}
+                              onClick={() => void removeComment(comment.id)}
+                              type="button"
+                            >
+                              {deletingCommentId === comment.id ? 'Deleting...' : <><Trash2 size={14} /> Delete</>}
+                            </button>
+                          </div>
                         )}
                       </article>
                     )

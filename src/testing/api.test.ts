@@ -9,6 +9,9 @@ import {
   login,
   logout,
   register,
+  SessionExpiredError,
+  sessionExpiredEventName,
+  updateComment,
   type AuthSession,
 } from '../api'
 
@@ -374,6 +377,25 @@ describe('auth API unit tests', () => {
         }),
       )
     })
+
+    it('updates a comment with the authenticated session', async () => {
+      const fetchMock = stubFetch(jsonResponse({
+        id: 'comment-9',
+        name: 'Sam',
+        text: 'Updated thought.',
+      }))
+
+      await expect(updateComment('comment-9', 'Updated thought.', 'test-token'))
+        .resolves.toMatchObject({ id: 'comment-9', text: 'Updated thought.' })
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/api/comments/comment-9'),
+        expect.objectContaining({
+          method: 'PUT',
+          headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: 'Updated thought.' }),
+        }),
+      )
+    })
   })
 
   it('posts credentials and normalizes a valid login session', async () => {
@@ -407,6 +429,18 @@ describe('auth API unit tests', () => {
 
     await expect(login('jane@example.com', 'wrong-password'))
       .rejects.toThrow('Invalid username or password.')
+  })
+
+  it.each(['Token expired', 'Invalid token'])('identifies rejected sessions (%s) and notifies the app to sign out', async (error) => {
+    const expiredListener = vi.fn()
+    window.addEventListener(sessionExpiredEventName, expiredListener)
+    stubFetch(jsonResponse({ error }, 401))
+
+    await expect(createComment({ movieId: 'movie-1', text: 'A thought' }, 'test-token'))
+      .rejects.toBeInstanceOf(SessionExpiredError)
+
+    expect(expiredListener).toHaveBeenCalledOnce()
+    window.removeEventListener(sessionExpiredEventName, expiredListener)
   })
 
   it('uses the HTTP status when another auth error has no JSON body', async () => {
