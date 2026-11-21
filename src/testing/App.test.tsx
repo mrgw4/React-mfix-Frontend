@@ -70,8 +70,17 @@ describe('movie discovery integration', () => {
 
   afterEach(() => {
     cleanup()
+    window.history.replaceState({}, '', '/')
     window.localStorage.clear()
     vi.unstubAllGlobals()
+  })
+
+  it('shows a not found page for unknown URLs', () => {
+    window.history.pushState({}, '', '/this/path/does/not/exist')
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: 'Page not found' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Back to Discover' })).toHaveAttribute('href', '/')
   })
 
   it('loads movies from the backend response', async () => {
