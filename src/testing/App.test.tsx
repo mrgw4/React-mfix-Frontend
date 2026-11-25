@@ -751,7 +751,7 @@ describe('movie discovery integration', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Post comment' }))
 
     expect(await screen.findByRole('button', { name: 'Open login menu' })).toBeVisible()
-    expect(await screen.findByRole('alert')).toHaveTextContent(
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
       'Your session has expired or is no longer valid. Please sign in again.',
     )
     expect(window.localStorage.getItem('mosaic.auth.v1')).toBeNull()
@@ -866,6 +866,44 @@ describe('movie discovery integration', () => {
         body: JSON.stringify({ text: 'Updated mine.' }),
       }),
     )
+  })
+
+  it('closes the comment editor and explains when its session token has expired', async () => {
+    window.localStorage.setItem('mosaic.auth.v1', JSON.stringify(authSession))
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input))
+      if (url.pathname.endsWith('/genres')) return { ok: true, json: async () => genresResponse }
+      if (url.pathname === '/api/movies') return { ok: true, json: async () => movieResponse }
+      if (url.pathname === '/api/comments/own-comment' && init?.method === 'PUT') {
+        return new Response(JSON.stringify({ error: 'Token expired' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.pathname === '/api/comments' && url.searchParams.has('userId')) {
+        return { ok: true, json: async () => ({ comments: [{ id: 'own-comment', name: 'A Fan', text: 'Mine.' }] }) }
+      }
+      if (url.pathname === '/api/comments') {
+        return { ok: true, json: async () => ({ comments: [{ id: 'own-comment', name: 'A Fan', text: 'Mine.' }] }) }
+      }
+      return { ok: true, json: async () => movieResponse.data[0] }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'View The Quiet Between' }))
+    const dialog = await screen.findByRole('dialog')
+    await within(dialog).findByText('Mine.')
+    await user.click(within(dialog).getByRole('button', { name: 'Edit comment by A Fan' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Your session has expired or is no longer valid. Please sign in again.',
+    )
+    expect(within(dialog).queryByLabelText('Edit comment by A Fan')).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Open login menu' })).toBeVisible()
+    expect(within(screen.getByRole('region', { name: 'Account menu' })).getByRole('alert')).toBeVisible()
   })
 
   it('allows a signed-in user to delete their own comment only', async () => {

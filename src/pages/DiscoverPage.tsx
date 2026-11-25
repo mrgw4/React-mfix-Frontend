@@ -23,6 +23,8 @@ import {
   getOwnedCommentIds,
   getMovie,
   getMovies,
+  sessionExpiredEventName,
+  sessionExpiredMessage,
   updateComment,
   type AdvancedMovieFilters,
   type Movie,
@@ -231,6 +233,17 @@ function DiscoverPage() {
     ? `${selectedMovie.id}:${commentPage}:${authSession?.user.id ?? 'guest'}`
     : ''
   const commentsLoading = Boolean(selectedMovie && loadedCommentsKey !== commentsRequestKey)
+
+  useEffect(() => {
+    function handleSessionExpired() {
+      setEditingCommentId('')
+      setEditingCommentText('')
+      setCommentError(sessionExpiredMessage)
+    }
+
+    window.addEventListener(sessionExpiredEventName, handleSessionExpired)
+    return () => window.removeEventListener(sessionExpiredEventName, handleSessionExpired)
+  }, [])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedSearch(search.trim()), 300)
@@ -1220,7 +1233,6 @@ function DiscoverPage() {
                     rows={3}
                     value={commentText}
                   />
-                  {commentError && <p className="comment-error" role="alert">{commentError}</p>}
                   <button
                     className="comment-submit"
                     disabled={commentLoading || !commentText.trim()}
@@ -1233,6 +1245,7 @@ function DiscoverPage() {
               ) : (
                 <p className="comment-login-prompt">Log in from the account menu to post and manage your comments.</p>
               )}
+              {commentError && <p className="comment-error" role="alert">{commentError}</p>}
 
               {!commentsLoading && commentsLoadError && <p className="comment-error" role="alert">Could not load comments: {commentsLoadError}</p>}
               <div aria-label="Movie comments" aria-live="polite" className="comment-list">
