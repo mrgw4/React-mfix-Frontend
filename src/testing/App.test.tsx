@@ -186,11 +186,14 @@ describe('movie discovery integration', () => {
     render(<App />)
 
     const sortSelect = await screen.findByRole('combobox', { name: 'Sort films' })
+    const sortOrderSelect = screen.getByRole('combobox', { name: 'Sort direction' })
     expect(sortSelect).toHaveValue('year')
+    expect(sortOrderSelect).toHaveDisplayValue('Newest year first')
 
     await user.selectOptions(sortSelect, 'imdbRating')
 
     expect(sortSelect).toHaveValue('imdbRating')
+    expect(sortOrderSelect).toHaveDisplayValue('Highest rated first')
     expect(screen.getByRole('heading', { name: 'A little of everything' })).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledWith(
       expect.stringMatching(/[?&]sort=imdbRating/),
@@ -200,6 +203,7 @@ describe('movie discovery integration', () => {
     await user.selectOptions(sortSelect, 'year')
 
     expect(sortSelect).toHaveValue('year')
+    expect(sortOrderSelect).toHaveDisplayValue('Newest year first')
     expect(fetch).toHaveBeenCalledWith(
       expect.stringMatching(/[?&]sort=year/),
       expect.objectContaining({}),
@@ -230,6 +234,7 @@ describe('movie discovery integration', () => {
     await user.type(screen.getByLabelText('Maximum Rotten Tomatoes audience rating'), '4.5')
     await user.selectOptions(sortSelect, 'imdbRating')
     await user.selectOptions(sortOrderSelect, 'asc')
+    expect(sortOrderSelect).toHaveDisplayValue('Lowest rated first')
     await user.click(screen.getByRole('button', { name: 'Apply filters' }))
 
     const advancedRequest = fetchMock.mock.calls
@@ -247,6 +252,7 @@ describe('movie discovery integration', () => {
     expect(sortOrderSelect).toHaveValue('asc')
 
     await user.selectOptions(sortSelect, 'year')
+    expect(sortOrderSelect).toHaveDisplayValue('Oldest year first')
     await waitFor(() => {
       const sortedRequest = fetchMock.mock.calls
         .map(([input]) => new URL(String(input)))

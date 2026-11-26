@@ -89,6 +89,17 @@ const movieSortOptions: { value: MovieSort; label: string }[] = [
   { value: 'tomatoesRating', label: 'Rotten Tomatoes audience rating' },
 ]
 
+const movieSortOrderLabels: Record<MovieSort, { asc: string; desc: string }> = {
+  title: { asc: 'A-Z', desc: 'Z-A' },
+  year: { asc: 'Oldest year first', desc: 'Newest year first' },
+  released: { asc: 'Oldest release first', desc: 'Newest release first' },
+  runtime: { asc: 'Shortest first', desc: 'Longest first' },
+  imdbRating: { asc: 'Lowest rated first', desc: 'Highest rated first' },
+  metacritic: { asc: 'Lowest score first', desc: 'Highest score first' },
+  tomatoesMeter: { asc: 'Lowest score first', desc: 'Highest score first' },
+  tomatoesRating: { asc: 'Lowest rating first', desc: 'Highest rating first' },
+}
+
 type WatchlistFilterOptions = {
   search: string
   genres: string[]
@@ -662,8 +673,8 @@ function DiscoverPage() {
                 onChange={(event) => updateSortOrder(event.target.value)}
                 value={selectedSortOrder}
               >
-                <option value="desc">Highest / newest first</option>
-                <option value="asc">Lowest / oldest first</option>
+                <option value="desc">{movieSortOrderLabels[selectedSort].desc}</option>
+                <option value="asc">{movieSortOrderLabels[selectedSort].asc}</option>
               </select>
             </label>
           </div>
