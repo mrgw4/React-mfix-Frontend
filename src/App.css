@@ -1592,6 +1592,18 @@
   color: #a0a8a1;
 }
 
+.comment-form-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.comment-character-count {
+  color: #849087;
+  font: 9px 'DM Mono', monospace;
+}
+
 .comment-submit {
   justify-self: end;
   display: flex;
@@ -1704,6 +1716,69 @@
 .comment-delete:disabled {
   opacity: .6;
   cursor: wait;
+}
+
+.comment-confirmation-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 24, 19, .62);
+  animation: fade-in .18s both;
+}
+
+.comment-confirmation {
+  width: min(390px, 100%);
+  padding: 24px;
+  background: white;
+  border-radius: 7px;
+  box-shadow: 0 25px 90px rgba(0, 0, 0, .25);
+  animation: rise-in .24s both;
+}
+
+.comment-confirmation h2 {
+  margin: 8px 0;
+  color: #18211e;
+  font: 600 20px/1.2 'Space Grotesk', sans-serif;
+}
+
+.comment-confirmation p {
+  margin: 0;
+  color: #69736c;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.comment-confirmation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.comment-confirmation-cancel,
+.comment-confirmation-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 10px;
+  border: 1px solid #d7dfd8;
+  border-radius: 3px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.comment-confirmation-cancel {
+  color: #304c3b;
+  background: white;
+}
+
+.comment-confirmation-delete {
+  color: white;
+  background: #a84436;
+  border-color: #a84436;
 }
 
 .comment-actions {

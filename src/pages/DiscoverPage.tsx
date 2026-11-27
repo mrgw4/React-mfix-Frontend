@@ -205,6 +205,7 @@ function DiscoverPage() {
   const [commentText, setCommentText] = useState('')
   const [commentError, setCommentError] = useState('')
   const [commentLoading, setCommentLoading] = useState(false)
+  const [commentPendingDeletion, setCommentPendingDeletion] = useState<MovieComment | null>(null)
   const [commentsLoadError, setCommentsLoadError] = useState('')
   const [loadedCommentsKey, setLoadedCommentsKey] = useState('')
   const [deletingCommentId, setDeletingCommentId] = useState('')
@@ -1244,14 +1245,19 @@ function DiscoverPage() {
                     rows={3}
                     value={commentText}
                   />
-                  <button
-                    className="comment-submit"
-                    disabled={commentLoading || !commentText.trim()}
-                    type="submit"
-                  >
-                    {commentLoading ? 'Posting...' : 'Post comment'}
-                    <Send size={14} />
-                  </button>
+                  <div className="comment-form-footer">
+                    <span className="comment-character-count">
+                      {commentText.length} / 500 characters
+                    </span>
+                    <button
+                      className="comment-submit"
+                      disabled={commentLoading || !commentText.trim()}
+                      type="submit"
+                    >
+                      {commentLoading ? 'Posting...' : 'Post comment'}
+                      <Send size={14} />
+                    </button>
+                  </div>
                 </form>
               ) : (
                 <p className="comment-login-prompt">Log in from the account menu to post and manage your comments.</p>
@@ -1335,7 +1341,7 @@ function DiscoverPage() {
                               aria-label={`Delete comment by ${comment.name}`}
                               className="comment-delete"
                               disabled={deletingCommentId !== '' || savingCommentId !== ''}
-                              onClick={() => void removeComment(comment.id)}
+                              onClick={() => setCommentPendingDeletion(comment)}
                               type="button"
                             >
                               {deletingCommentId === comment.id ? 'Deleting...' : <><Trash2 size={14} /> Delete</>}
@@ -1374,6 +1380,54 @@ function DiscoverPage() {
             </div>
           </div>
         </section>
+      {commentPendingDeletion && (
+        <div
+          className="comment-confirmation-backdrop"
+          onMouseDown={(event) => {
+            event.stopPropagation()
+            if (event.target === event.currentTarget) setCommentPendingDeletion(null)
+          }}
+        >
+          <section
+            aria-describedby="comment-confirmation-description"
+            aria-labelledby="comment-confirmation-title"
+            aria-modal="true"
+            className="comment-confirmation"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setCommentPendingDeletion(null)
+            }}
+            role="alertdialog"
+          >
+            <div className="detail-section-label">COMMENT ACTION</div>
+            <h2 id="comment-confirmation-title">Delete this comment?</h2>
+            <p id="comment-confirmation-description">
+              This will permanently remove your comment. This action cannot be undone.
+            </p>
+            <div className="comment-confirmation-actions">
+              <button
+                autoFocus
+                className="comment-confirmation-cancel"
+                onClick={() => setCommentPendingDeletion(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="comment-confirmation-delete"
+                onClick={() => {
+                  const commentId = commentPendingDeletion.id
+                  setCommentPendingDeletion(null)
+                  void removeComment(commentId)
+                }}
+                type="button"
+              >
+                <Trash2 size={13} />
+                Delete comment
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       </div>
     )}
   </div>

@@ -720,6 +720,7 @@ describe('movie discovery integration', () => {
     expect(within(dialog).getByText('87% · 150 reviews')).toBeVisible()
     expect(await within(dialog).findByText('Great!')).toBeVisible()
     await user.type(within(dialog).getByLabelText('Your comment'), 'Loved it.')
+    expect(within(dialog).getByText('9 / 500 characters')).toBeVisible()
     await user.click(within(dialog).getByRole('button', { name: 'Post comment' }))
 
     expect(await within(dialog).findByText('Loved it.')).toBeVisible()
@@ -944,6 +945,10 @@ describe('movie discovery integration', () => {
 
     await user.click(within(dialog).getByRole('button', { name: 'Delete comment by A Fan' }))
 
+    const confirmation = await screen.findByRole('alertdialog', { name: 'Delete this comment?' })
+    expect(within(confirmation).getByText(/This action cannot be undone/)).toBeVisible()
+    await user.click(within(confirmation).getByRole('button', { name: 'Delete comment' }))
+
     await waitFor(() => expect(within(dialog).queryByText('Mine.')).not.toBeInTheDocument())
     expect(within(dialog).getByText('Not mine.')).toBeVisible()
     expect(fetchMock).toHaveBeenCalledWith(
@@ -952,6 +957,39 @@ describe('movie discovery integration', () => {
         method: 'DELETE',
         headers: { Authorization: 'Bearer test-token' },
       }),
+    )
+  })
+
+  it('does not delete a comment when deletion is cancelled', async () => {
+    window.localStorage.setItem('mosaic.auth.v1', JSON.stringify(authSession))
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      if (url.pathname.endsWith('/genres')) return { ok: true, json: async () => genresResponse }
+      if (url.pathname === '/api/movies') return { ok: true, json: async () => movieResponse }
+      if (url.pathname === '/api/comments' && url.searchParams.has('userId')) {
+        return { ok: true, json: async () => ({ comments: [{ id: 'own-comment', name: 'A Fan', text: 'Mine.' }] }) }
+      }
+      if (url.pathname === '/api/comments') {
+        return { ok: true, json: async () => ({ comments: [{ id: 'own-comment', name: 'A Fan', text: 'Mine.' }] }) }
+      }
+      return { ok: true, json: async () => movieResponse.data[0] }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'View The Quiet Between' }))
+    const dialog = await screen.findByRole('dialog')
+    await within(dialog).findByText('Mine.')
+    await user.click(within(dialog).getByRole('button', { name: 'Delete comment by A Fan' }))
+    const confirmation = await screen.findByRole('alertdialog', { name: 'Delete this comment?' })
+    await user.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(within(dialog).getByText('Mine.')).toBeVisible()
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('/api/comments/own-comment'),
+      expect.objectContaining({ method: 'DELETE' }),
     )
   })
 
